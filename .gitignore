@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Xcode 사용자별 상태/설정 (개인 작업 환경이라 공유 X)
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# 빌드 산출물
+build/
+DerivedData/
+*.xcarchive
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Claude Code 로컬 설정 (개인 환경)
+.claude/
+
+# 기타
+*.swp
+*.swo
