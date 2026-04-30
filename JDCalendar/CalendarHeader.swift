@@ -48,9 +48,8 @@ struct CalendarHeader: View {
             }
         }
         // 헤더 영역의 안쪽 여백 — 위 20, 아래 16.
-        // leading은 88로 늘려서 macOS 신호등(빨/노/초, 대략 x=20~82)이 차지하는 자리를 비워둔다.
-        // 이렇게 해야 창을 줄여도 "YYYY년 M월"이 신호등에 가려지지 않는다.
-        .padding(.leading, 88)
+        // 슬라이스 2부터 신호등은 ContentView의 상단 띠가 가려주므로 헤더는 보통의 leading 패딩만 사용.
+        .padding(.leading, 24)
         .padding(.trailing, 32)
         .padding(.top, 20)
         .padding(.bottom, 16)

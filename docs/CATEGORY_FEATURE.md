@@ -16,6 +16,7 @@
 | `color`    | `String` | Hex 문자열 (`#RRGGBB`). 5.7 팔레트 또는 자유 색 |
 | `note`     | `String` | 옵셔널, 멀티라인, 길이 제한 없음 (빈 문자열 허용) |
 | `createdAt`| `Date`   | 생성 시각. v1은 정렬 기준으로 사용 |
+| `isVisible`| `Bool`   | 사이드바 필터 체크 상태. 기본값 `true`. 다음 실행에도 유지 |
 
 - 정렬: v1에서는 `createdAt` 오름차순 고정. 사용자 reorder UI 없음.
 - `updatedAt` 등 추가 메타데이터는 v1엔 두지 않는다 (필요해질 때 추가).

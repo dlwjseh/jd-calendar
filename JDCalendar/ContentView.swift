@@ -1,8 +1,16 @@
 import SwiftUI
+import SwiftData
 
 // 앱의 최상위 화면 — 헤더 + 요일행 + 6주 그리드를 세로로 쌓아서 보여준다.
 // 현재 어느 달을 보고 있는지(year, month)를 상태로 들고 있다가 헤더의 ‹/›/Today 버튼으로 갱신한다.
 struct ContentView: View {
+    // SwiftData가 흘려준 ModelContext — 시드 / 조회 / 저장 모두 이걸로 한다.
+    @Environment(\.modelContext) private var modelContext
+
+    // 사이드바 펼침 상태. @AppStorage는 UserDefaults에 자동 저장 → 다음 실행에 복원된다(5.2).
+    // 기본값 true는 첫 실행 시 펼친 상태로 시작한다는 의미(첫 실행 후엔 사용자 마지막 값을 따름).
+    @AppStorage("sidebarVisible") private var sidebarVisible: Bool = true
+
     // @State: SwiftUI가 값의 변화를 감지해서 화면을 다시 그리도록 만드는 속성 래퍼.
     // year/month는 사용자가 ‹/›를 누를 때마다 바뀌므로 @State로 선언한다.
     @State private var year: Int
@@ -23,19 +31,12 @@ struct ContentView: View {
     }
 
     var body: some View {
-        // 창 전체를 달력이 가득 채우는 단일 레이아웃 — 둥근 모서리/그림자/페이지 배경 없음.
-        // 위에서 아래로 헤더 → 요일행 → 6×7 그리드 순으로 쌓는다.
+        // 새로운 레이아웃(슬라이스 2) — 위에서 아래로:
+        //   1) 상단 띠: 사이드바 토글 버튼(좌상단 고정)
+        //   2) 본체: 좌(사이드바, 펼침일 때) | 우(달력 헤더+요일행+그리드)
         VStack(spacing: 0) {
-            CalendarHeader(
-                year: year,
-                month: month,
-                // 함수 자체를 클로저로 넘김 — 버튼이 눌리면 헤더가 이걸 호출한다.
-                onPrev: prev,
-                onNext: next,
-                onToday: today
-            )
-            WeekdayRow()
-            CalendarGrid(year: year, month: month)
+            topStrip
+            mainSplit
         }
         // 부모(창)가 주는 공간을 끝까지 다 차지하도록 펼친다.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,6 +44,53 @@ struct ContentView: View {
         .foregroundStyle(theme.fg)
         // 타이틀바를 숨겼으므로 콘텐츠가 창 가장자리(safe area)를 무시하고 끝까지 그려지게 한다.
         .ignoresSafeArea()
+        // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 트리거 자리.
+        .task {
+            EventCategory.seedIfNeeded(in: modelContext)
+        }
+    }
+
+    // 상단 띠 — A2 안. 토글 버튼이 좌측에, 우측은 비워둠.
+    // leading 88pt는 macOS 신호등(빨/노/초)이 차지하는 자리(약 x=20~82)를 비우기 위함.
+    // 높이 40pt: 토글 버튼(28pt)이 잘리지 않으면서 신호등과 거의 같은 세로선에 오도록.
+    private var topStrip: some View {
+        HStack {
+            SidebarToggleButton(isVisible: $sidebarVisible)
+            Spacer()
+        }
+        .padding(.leading, 88)
+        .padding(.trailing, 16)
+        .frame(height: 40)
+    }
+
+    // 본체 — HStack으로 사이드바와 캘린더를 좌·우로 나눈다.
+    // sidebarVisible이 false면 사이드바와 그 옆의 Divider를 통째로 빼서 캘린더가 전체 폭을 차지.
+    // 부모 뷰의 .animation 모디파이어가 if 분기 등장/사라짐을 부드럽게 보간한다.
+    private var mainSplit: some View {
+        HStack(spacing: 0) {
+            if sidebarVisible {
+                CategorySidebar()
+                    // .move(edge: .leading): 사이드바가 좌측에서 슬라이드해 들어오고/나간다.
+                    // .opacity 결합: 슬라이드 동안 페이드도 함께 — 끝점에서 깜빡임 방지.
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+            // 캘린더 영역. 사이드바 펼침/접힘에 따라 자동으로 가용 폭 전체를 채운다.
+            VStack(spacing: 0) {
+                CalendarHeader(
+                    year: year,
+                    month: month,
+                    // 함수 자체를 클로저로 넘김 — 버튼이 눌리면 헤더가 이걸 호출한다.
+                    onPrev: prev,
+                    onNext: next,
+                    onToday: today
+                )
+                WeekdayRow()
+                CalendarGrid(year: year, month: month)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        // 0.22초의 easeInOut — CATEGORY_FEATURE.md 5.2의 슬라이드 애니메이션 사양.
+        .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
     }
 
     // 이전 달로 이동 — 1월에서 누르면 작년 12월로 넘어간다.

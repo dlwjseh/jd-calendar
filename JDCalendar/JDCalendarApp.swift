@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 // @main: 이 구조체가 앱의 진입점(entry point)임을 컴파일러에게 알려주는 마커.
 // SwiftUI 앱은 main 함수를 직접 쓰지 않고, App 프로토콜을 따르는 구조체에 @main을 붙여서 시작한다.
@@ -21,5 +22,9 @@ struct JDCalendarApp: App {
         .windowResizability(.contentMinSize)
         // hiddenTitleBar: 타이틀바 막대를 숨김 — 신호등 3개는 콘텐츠 위에 그대로 떠 있음.
         .windowStyle(.hiddenTitleBar)
+        // SwiftData 컨테이너 부착 — 이 모디파이어가 앱 전체에 ModelContext를 환경값으로 흘려준다.
+        // 이벤트 모델이 추가되면 배열에 같이 넣는다(EVENT_FEATURE.md 작업 시).
+        // 저장 위치는 기본값 ~/Library/Application Support/com.jd.JDCalendar/default.store.
+        .modelContainer(for: [EventCategory.self])
     }
 }
