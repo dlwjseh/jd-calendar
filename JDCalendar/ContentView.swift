@@ -27,7 +27,16 @@ struct ContentView: View {
     // §6.2 — 가로 스와이프로 월 이동을 처리하는 NSEvent monitor.
     @StateObject private var swipeMonitor = MonthSwipeMonitor()
 
+    // 월 이동 transition 방향 — prev/next/today/swipe가 호출 직전에 세팅 → calendarTransition이 읽음.
+    // 시작값은 forward(별 의미 없음 — 첫 렌더에선 transition이 발화되지 않음).
+    @State private var navDirection: NavDirection = .forward
+
     private let theme = CalendarTheme.light
+
+    // 월 이동 방향 — 이전 달인지 다음 달인지에 따라 grid가 좌/우로 슬라이드.
+    enum NavDirection {
+        case forward, backward
+    }
 
     // init: 앱이 시작되면 무조건 "오늘이 속한 달"로 초기화한다.
     // CLAUDE.md의 v1 규칙: cursor persistence 없음 — 항상 오늘 달로 연다.
@@ -170,40 +179,85 @@ struct ContentView: View {
                     onToday: today
                 )
                 WeekdayRow()
+                // 월이 바뀔 때 좌/우 슬라이드 + 페이드 transition.
+                // .id()로 (year, month) 조합마다 별도 view identity → SwiftUI가 transition 발화.
+                // 잘림 방지로 .clipped() — 이전 달 grid가 트랙 바깥으로 밀려나가는 동안 가려짐.
                 CalendarGrid(year: year, month: month, selectedEventId: $selectedEventId)
+                    .id("\(year)-\(month)")
+                    .transition(calendarTransition)
             }
             .frame(maxWidth: .infinity)
+            .clipped()
         }
         // 0.22초의 easeInOut — CATEGORY_FEATURE.md 5.2의 슬라이드 애니메이션 사양.
         .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
     }
 
-    // 이전 달로 이동 — 1월에서 누르면 작년 12월로 넘어간다.
+    // 월 이동 transition — 방향에 따라 새 grid가 들어오는 / 옛 grid가 나가는 edge가 달라진다.
+    // forward: 새 달이 우측에서 들어오고 옛 달이 좌측으로 나감.
+    // backward: 새 달이 좌측에서 들어오고 옛 달이 우측으로 나감.
+    // 둘 다 .opacity와 결합해 끝점 깜빡임을 부드럽게.
+    private var calendarTransition: AnyTransition {
+        switch navDirection {
+        case .forward:
+            return .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            )
+        case .backward:
+            return .asymmetric(
+                insertion: .move(edge: .leading).combined(with: .opacity),
+                removal: .move(edge: .trailing).combined(with: .opacity)
+            )
+        }
+    }
+
+    // 월 이동 transition 스펙 — 헤더 버튼/Today/스와이프 모두 같은 곡선·시간으로 이동.
+    private static let monthNavAnimation: Animation = .easeInOut(duration: 0.28)
+
+    // 이전 달로 이동 — 1월에서 누르면 작년 12월로 넘어간다. backward 슬라이드 transition.
     private func prev() {
-        if month == 0 {
-            year -= 1
-            month = 11
-        } else {
-            month -= 1
+        navDirection = .backward
+        withAnimation(Self.monthNavAnimation) {
+            if month == 0 {
+                year -= 1
+                month = 11
+            } else {
+                month -= 1
+            }
         }
     }
 
-    // 다음 달로 이동 — 12월에서 누르면 내년 1월로 넘어간다.
+    // 다음 달로 이동 — 12월에서 누르면 내년 1월로 넘어간다. forward 슬라이드 transition.
     private func next() {
-        if month == 11 {
-            year += 1
-            month = 0
-        } else {
-            month += 1
+        navDirection = .forward
+        withAnimation(Self.monthNavAnimation) {
+            if month == 11 {
+                year += 1
+                month = 0
+            } else {
+                month += 1
+            }
         }
     }
 
-    // Today 버튼 — 어느 달을 보고 있든 즉시 오늘이 속한 달로 점프한다.
+    // Today 버튼 — 어느 달을 보고 있든 오늘이 속한 달로 점프.
+    // 현재 달과의 절대값 비교로 forward/backward 방향 결정 → 자연스러운 슬라이드.
     private func today() {
         let now = Date()
         let cal = Calendar(identifier: .gregorian)
-        year = cal.component(.year, from: now)
-        month = cal.component(.month, from: now) - 1
+        let newYear = cal.component(.year, from: now)
+        let newMonth = cal.component(.month, from: now) - 1
+
+        let oldKey = year * 12 + month
+        let newKey = newYear * 12 + newMonth
+        guard newKey != oldKey else { return }
+        navDirection = newKey > oldKey ? .forward : .backward
+
+        withAnimation(Self.monthNavAnimation) {
+            year = newYear
+            month = newMonth
+        }
     }
 }
 
