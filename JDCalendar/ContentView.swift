@@ -162,10 +162,14 @@ struct ContentView: View {
     }
 
     // 선택된 이벤트가 있으면 modelContext에서 fetch해서 alert 대상으로 세팅.
+    // 시스템 관리 카테고리(공휴일 등)의 이벤트는 키보드 Delete로도 삭제할 수 없도록 여기서 차단.
+    // chip/막대 자체에서 컨텍스트 메뉴는 이미 숨겨졌지만, 단일 클릭으로 선택은 허용되므로
+    // 글로벌 단축키 진입점에서 한 번 더 막아야 한다.
     private func requestDeleteSelected() {
         guard let id = selectedEventId else { return }
         let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == id })
         if let ev = try? modelContext.fetch(descriptor).first {
+            guard !ev.category.isSystemManaged else { return }
             pendingDeleteEvent = ev
         }
     }
