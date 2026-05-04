@@ -1,10 +1,17 @@
 import SwiftUI
+import SwiftData
 
 // 6주 × 7일 = 42칸짜리 달력 그리드.
 // 이번 달 날짜만으로는 항상 42칸을 못 채우므로, 앞은 지난 달 끝부분, 뒤는 다음 달 앞부분으로 메운다.
 struct CalendarGrid: View {
     let year: Int
     let month: Int
+    // §5.1 — 한 번에 한 이벤트만 선택. ContentView에서 끌어내려 모든 셀에 같은 binding 전달.
+    @Binding var selectedEventId: UUID?
+
+    // 모든 이벤트를 한 번에 fetch — v1엔 데이터가 적으니 충분하다.
+    // 데이터가 늘어나면 (year, month) 범위 predicate로 좁히는 최적화로 대체한다.
+    @Query private var events: [Event]
 
     private let theme = CalendarTheme.light
 
@@ -14,28 +21,60 @@ struct CalendarGrid: View {
         // 셀 개수에서 주 수를 역산 — 35면 5주, 42면 6주.
         let weekCount = cells.count / 7
         let today = Date()
+        // §4.4 카테고리 필터를 한 번만 — 단일일/멀티데이가 같이 사용한다.
+        let visibleEvents = events.filter { $0.category.isVisible }
+        let perDay = singleDayEventsByDay(visibleEvents)
+        let allSegments = MultiDayLayout.buildSegments(events: visibleEvents, cells: cells)
+        let trackCounts = MultiDayLayout.cellTrackCounts(segments: allSegments, weekCount: weekCount)
 
-        // VStack 안에 주(HStack)를 쌓는 구조. 각 행이 maxHeight: .infinity인 셀을 담아
+        // VStack 안에 주(WeekRow)를 쌓는 구조. 각 행이 maxHeight: .infinity인 셀을 담아
         // SwiftUI가 부모가 준 세로 공간을 weekCount(5 또는 6)로 균등하게 자동 배분한다.
-        // GeometryReader 없이도 창을 늘리면 셀이 같이 커지고, 5주짜리 달엔 5행만 그려진다.
         VStack(spacing: 0) {
             ForEach(0..<weekCount, id: \.self) { week in
-                HStack(spacing: 0) {
-                    ForEach(0..<7, id: \.self) { day in
-                        DayCell(
-                            cell: cells[week * 7 + day],
-                            today: today,
-                            isLastRow: week == weekCount - 1, // 동적 주 수 기준으로 마지막 행 여부 판단.
-                            isLastCol: day == 6
-                        )
-                    }
-                }
+                let weekCells = Array(cells[week*7..<(week+1)*7])
+                let weekSegs = allSegments.filter { $0.weekIndex == week }
+                let weekTracks = Array(trackCounts[week*7..<(week+1)*7])
+                WeekRow(
+                    weekIndex: week,
+                    cells: weekCells,
+                    today: today,
+                    isLastRow: week == weekCount - 1,
+                    perDayEvents: perDay,
+                    weekSegments: weekSegs,
+                    cellTrackCounts: weekTracks,
+                    selectedEventId: $selectedEventId
+                )
             }
         }
         // 그리드 맨 위에도 1px 가로선 — 요일행과 첫 주를 분리.
         .overlay(alignment: .top) {
             Rectangle().fill(theme.line).frame(height: 1)
         }
+    }
+
+    // 단일일 이벤트만 (시작 날짜 00:00) 키로 묶어 dict로 반환. 멀티데이는 MultiDayLayout이 따로 처리.
+    // - 호출자가 §4.4 카테고리 필터를 이미 적용한 visibleEvents를 넘긴다(중복 작업 방지).
+    // - §4.5 셀 내 정렬: 종일 먼저 → startAt 오름차순 → createdAt 오름차순 타이브레이커.
+    private func singleDayEventsByDay(_ visibleEvents: [Event]) -> [Date: [Event]] {
+        var dict: [Date: [Event]] = [:]
+        let cal = Calendar.current
+
+        for ev in visibleEvents where !MultiDayLayout.isMultiDay(ev) {
+            let key = cal.startOfDay(for: ev.startAt)
+            dict[key, default: []].append(ev)
+        }
+
+        for key in dict.keys {
+            dict[key]?.sort(by: eventOrdering)
+        }
+        return dict
+    }
+
+    // §4.5 정렬 함수(단일일 셀 내) — 종일 우선, 그 다음 startAt, 마지막에 createdAt.
+    private func eventOrdering(_ lhs: Event, _ rhs: Event) -> Bool {
+        if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
+        if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
+        return lhs.createdAt < rhs.createdAt
     }
 
     // 주어진 연/월에 대해 화면에 띄울 42개 날짜 셀을 만들어 돌려준다.

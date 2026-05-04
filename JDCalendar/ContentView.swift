@@ -17,6 +17,13 @@ struct ContentView: View {
     // month는 0~11 (1월=0, 12월=11) 형태로 저장. 표시할 때만 +1 한다.
     @State private var month: Int
 
+    // §5.1 — 한 번에 한 이벤트만 선택. CalendarGrid → DayCell → EventChip으로 binding을 흘려보낸다.
+    @State private var selectedEventId: UUID? = nil
+
+    // §5.4 — Delete 키로 삭제 시 띄울 확인 alert의 대상.
+    // chip 자체의 우클릭 삭제는 chip 안에서 처리하지만, 글로벌 키 핸들러(Delete)는 여기서.
+    @State private var pendingDeleteEvent: Event? = nil
+
     private let theme = CalendarTheme.light
 
     // init: 앱이 시작되면 무조건 "오늘이 속한 달"로 초기화한다.
@@ -47,6 +54,65 @@ struct ContentView: View {
         // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 트리거 자리.
         .task {
             EventCategory.seedIfNeeded(in: modelContext)
+        }
+        // 글로벌 키 핸들러 — Esc(선택 해제), Delete/Backspace(선택된 이벤트 삭제 요청).
+        // .background에 hidden 버튼 + .keyboardShortcut으로 등록하는 SwiftUI macOS 관용 패턴.
+        // sheet/alert가 떠 있을 때는 그쪽 키 핸들러가 우선이라 모달 동작과 충돌하지 않는다.
+        .background {
+            keyboardHandlers
+        }
+        // §5.4 — Delete 키로 삭제 요청 시 뜨는 확인 다이얼로그. chip 자체 우클릭 삭제는 chip 안에서 별도로 처리.
+        .alert(
+            pendingDeleteEvent.map { "\"\($0.title)\"을 삭제할까요?" } ?? "",
+            isPresented: Binding(
+                get: { pendingDeleteEvent != nil },
+                set: { if !$0 { pendingDeleteEvent = nil } }
+            ),
+            presenting: pendingDeleteEvent
+        ) { ev in
+            Button("취소", role: .cancel) { }
+                .keyboardShortcut(.defaultAction)
+            Button("삭제", role: .destructive) {
+                modelContext.delete(ev)
+                try? modelContext.save()
+                selectedEventId = nil
+            }
+        }
+    }
+
+    // 글로벌 키 핸들러 모음 — invisible 버튼들을 zero size로 깔아 단축키만 받는다.
+    private var keyboardHandlers: some View {
+        ZStack {
+            Button {
+                selectedEventId = nil
+            } label: { EmptyView() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+
+            // KeyEquivalent.delete = macOS의 Backspace. forward delete(fn+Backspace)도 같이 등록.
+            Button {
+                requestDeleteSelected()
+            } label: { EmptyView() }
+                .keyboardShortcut(.delete, modifiers: [])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+
+            Button {
+                requestDeleteSelected()
+            } label: { EmptyView() }
+                .keyboardShortcut(.deleteForward, modifiers: [])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+        }
+    }
+
+    // 선택된 이벤트가 있으면 modelContext에서 fetch해서 alert 대상으로 세팅.
+    private func requestDeleteSelected() {
+        guard let id = selectedEventId else { return }
+        let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == id })
+        if let ev = try? modelContext.fetch(descriptor).first {
+            pendingDeleteEvent = ev
         }
     }
 
@@ -85,7 +151,7 @@ struct ContentView: View {
                     onToday: today
                 )
                 WeekdayRow()
-                CalendarGrid(year: year, month: month)
+                CalendarGrid(year: year, month: month, selectedEventId: $selectedEventId)
             }
             .frame(maxWidth: .infinity)
         }

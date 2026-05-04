@@ -13,11 +13,28 @@ struct DayCellModel: Hashable {
 struct DayCell: View {
     let cell: DayCellModel
     let today: Date
-    // 격자선을 마지막 행/칼럼에는 그리지 않기 위해 부모(CalendarGrid)가 알려주는 플래그.
+    // 격자선을 마지막 행/칼럼에는 그리지 않기 위해 부모(WeekRow)가 알려주는 플래그.
     let isLastRow: Bool
     let isLastCol: Bool
+    // 이 셀 날짜에 표시할 단일일 이벤트들 — 부모(WeekRow)에서 §4.4 필터/§4.5 정렬을 거쳐 넘겨준다.
+    let events: [Event]
+    // 이 셀 위로 지나가는 멀티데이 막대의 트랙 수(§4.3) — 그만큼 셀 안에 invisible spacer를 둬서
+    // 단일일 chip이 막대 아래에 깔끔히 정렬되도록 한다. 실제 막대는 WeekRow의 overlay가 그린다.
+    let multiDayTrackCount: Int
+    // §5.1 — 한 번에 한 이벤트만 선택. 자식 EventChip에 그대로 binding으로 내려준다.
+    @Binding var selectedEventId: UUID?
+
+    // EVENT_FEATURE.md §3.1 — 셀 더블클릭 시 새 이벤트 시트.
+    // 셀마다 자체 sheet 상태를 들고 있지만 SwiftUI 모달은 한 번에 하나만 뜨므로 충돌 없음.
+    @State private var showingEditor = false
 
     private let theme = CalendarTheme.light
+
+    // §4.2 — 셀당 최대 트랙 합계. v1 고정 3 (멀티데이 트랙 + 단일일 chip 합산).
+    private static let maxTracks = 3
+    // 멀티데이 막대 한 줄 트랙 높이 — WeekRow.trackHeight와 같아야 막대와 spacer가 정렬된다.
+    private static let trackHeight: CGFloat = 16
+    private static let trackSpacing: CGFloat = 1
 
     // 이 셀이 "오늘"인지 — 같은 날짜면 빨간 캡슐로 강조.
     // computed property라서 매 렌더링마다 다시 계산되지만, 단순 비교라 비용 무시 가능.
@@ -40,9 +57,11 @@ struct DayCell: View {
     }
 
     var body: some View {
-        // VStack + Spacer — 날짜 숫자를 좌상단에 두고 나머지 공간은 비워서 일정용 영역으로 남긴다.
+        // VStack + Spacer — 날짜 숫자를 좌상단에 두고 그 아래 (멀티데이 자리) → 단일일 chips → 비움.
         VStack(alignment: .leading, spacing: 0) {
             label
+            multiDaySpacer
+            eventsList
             Spacer(minLength: 0)
         }
         // 셀이 그리드의 한 칸 전체를 채우게 늘리고, 글자는 좌상단 정렬.
@@ -57,6 +76,21 @@ struct DayCell: View {
         .padding(.bottom, 4)
         // 이번 달이 아닌 셀은 전체적으로 살짝 투명하게 — 흐리게 표시 효과.
         .opacity(cell.inMonth ? 1 : 0.55)
+        // 빈 영역까지 더블클릭/단일클릭 대상이 되도록 셀 전체에 히트 영역.
+        .contentShape(Rectangle())
+        // §3.1 — 셀 더블클릭으로 새 이벤트 시트 열기. count: 2를 먼저 등록.
+        .onTapGesture(count: 2) {
+            showingEditor = true
+        }
+        // §5.1 — 셀의 빈 영역(이벤트 chip이 아닌 곳) single tap 시 선택 해제.
+        // chip 위 클릭은 chip의 onTapGesture가 먼저 잡아서 여기로 propagate되지 않는다.
+        .onTapGesture(count: 1) {
+            selectedEventId = nil
+        }
+        // 시트는 셀 단위 — initialDate로 셀 날짜를 넘긴다.
+        .sheet(isPresented: $showingEditor) {
+            EventEditor(initialDate: cell.date)
+        }
         // 오른쪽 세로 1px 격자선 — 단, 마지막 칼럼(토요일)에는 그리지 않아 바깥선 두꺼워짐 방지.
         .overlay(alignment: .trailing) {
             if !isLastCol {
@@ -71,7 +105,47 @@ struct DayCell: View {
         }
     }
 
+    // 멀티데이 막대 자리 — overlay에 그려지는 막대들의 영역만큼 빈 공간.
+    // 트랙 N개라면 (N * trackHeight) + ((N-1) * trackSpacing) 만큼 비움.
+    @ViewBuilder
+    private var multiDaySpacer: some View {
+        if multiDayTrackCount > 0 {
+            let h = CGFloat(multiDayTrackCount) * Self.trackHeight
+                  + CGFloat(max(0, multiDayTrackCount - 1)) * Self.trackSpacing
+            // 첫 트랙 직전 padding(2pt)도 함께 — WeekRow.firstTrackTop 계산과 일치.
+            Spacer().frame(height: h + 2)
+        }
+    }
+
+    // 셀 안 단일일 이벤트 목록 — §4.2 트랙 합계 max 3 기준으로 표시 가능 슬롯 계산.
+    // 멀티데이 트랙이 3개 이상이면 단일일 chip은 한 개도 못 들어가고, 모자란 만큼 +M more에 합산.
+    // §5.6의 +M more 클릭(셀 세로 확장)은 다음 단계에서 wiring.
+    @ViewBuilder
+    private var eventsList: some View {
+        let availableSlots = max(0, Self.maxTracks - multiDayTrackCount)
+        let visibleSingles = events.prefix(availableSlots)
+        let hiddenSingles = max(0, events.count - visibleSingles.count)
+        // overflow는 표시 못한 단일일 수만 — 멀티데이는 overlay로 이미 보이고 있으니 카운트하지 않는다.
+        let overflow = hiddenSingles
+
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(visibleSingles), id: \.id) { ev in
+                EventChip(event: ev, selectedEventId: $selectedEventId)
+            }
+            if overflow > 0 {
+                Text("+\(overflow) more")
+                    .font(.system(size: 10))
+                    .foregroundStyle(theme.muted)
+                    .padding(.leading, 4)
+            }
+        }
+        // 멀티데이 트랙이 없는 셀은 라벨 직후 작은 padding으로 시작.
+        .padding(.top, multiDayTrackCount == 0 ? 2 : 0)
+    }
+
     // 날짜 숫자 라벨. 오늘이면 빨간 캡슐 + 흰 글자, 아니면 평범한 글자만.
+    // 둘 다 minHeight: 20으로 통일 — 셀 안 콘텐츠(멀티데이 spacer/단일일 chip) 시작 높이가 일정해야
+    // WeekRow overlay의 막대 y 좌표(firstTrackTop)와 정렬된다.
     // @ViewBuilder: if/else로 서로 다른 View를 한 프로퍼티에서 반환할 수 있게 해주는 어트리뷰트.
     @ViewBuilder
     private var label: some View {
@@ -91,6 +165,8 @@ struct DayCell: View {
                 .tracking(0.2)
                 .foregroundStyle(dayColor)
                 .padding(.horizontal, 2)
+                // today 셀과 같은 minHeight로 정렬.
+                .frame(minHeight: 20, alignment: .topLeading)
         }
     }
 }

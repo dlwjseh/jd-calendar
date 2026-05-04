@@ -82,4 +82,19 @@ extension Color {
         let b = Int(round(nsColor.blueComponent * 255))
         return String(format: "#%02X%02X%02X", r, g, b)
     }
+
+    // 주어진 hex 색을 배경으로 썼을 때 가독성이 좋은 텍스트 색(흰색 또는 검정).
+    // EVENT_FEATURE.md §4.1 — 종일 이벤트의 색 배경 박스 위 글자 색을 자동으로 정한다.
+    // 가중 휘도(perceptual luminance) 임계값 0.6 — 팔레트의 lightGray(#BFBFBF, 휘도≈0.75)는 검정,
+    // 나머지 채도 있는 색들은 휘도 0.6 미만이라 흰색이 된다.
+    static func contrastingText(forHex hex: String) -> Color {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        var rgb: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&rgb)
+        let r = Double((rgb & 0xFF0000) >> 16) / 255
+        let g = Double((rgb & 0x00FF00) >> 8) / 255
+        let b = Double(rgb & 0x0000FF) / 255
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return luminance > 0.6 ? .black : .white
+    }
 }
