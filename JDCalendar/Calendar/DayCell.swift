@@ -34,6 +34,8 @@ struct DayCell: View {
     @State private var showingDayPopover = false
     // §6.1 — 드래그된 이벤트가 이 셀 위에 있을 때 외곽 강조용 플래그.
     @State private var isDropTarget = false
+    // 마우스가 이 셀 위에 올라와 있는지 — 옅은 배경 틴트로 어떤 셀이 클릭 대상인지 알려준다.
+    @State private var isHovered = false
 
     // §6.1 — 드롭된 이벤트를 fetch / 저장하기 위한 컨텍스트.
     @Environment(\.modelContext) private var modelContext
@@ -44,7 +46,7 @@ struct DayCell: View {
     private static let maxTracks = 3
     // 멀티데이 막대 한 줄 트랙 높이 — WeekRow.trackHeight와 같아야 막대와 spacer가 정렬된다.
     private static let trackHeight: CGFloat = 16
-    private static let trackSpacing: CGFloat = 1
+    private static let trackSpacing: CGFloat = 2
 
     // 이 셀이 "오늘"인지 — 같은 날짜면 빨간 캡슐로 강조.
     // computed property라서 매 렌더링마다 다시 계산되지만, 단순 비교라 비용 무시 가능.
@@ -81,8 +83,8 @@ struct DayCell: View {
         .frame(minHeight: 96)
         // 안쪽 여백 — 위/좌/우/하를 따로 잡아서 디자인 원본과 동일한 간격으로 맞춤.
         .padding(.top, 5)
-        .padding(.leading, 6)
-        .padding(.trailing, 6)
+        .padding(.leading, 5)
+        .padding(.trailing, 5)
         .padding(.bottom, 4)
         // 이번 달이 아닌 셀은 전체적으로 살짝 투명하게 — 흐리게 표시 효과.
         .opacity(cell.inMonth ? 1 : 0.55)
@@ -112,6 +114,14 @@ struct DayCell: View {
         .sheet(isPresented: $showingEditor) {
             EventEditor(initialDate: cell.date)
         }
+        // 마우스 호버 감지 — 들어왔다/나갔다 boolean만 토글. 진입/이탈 즉시 반응(애니메이션 없음).
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        // 호버 시 셀 전체에 옅은 그레이 틴트. 이번 달(cell.inMonth==true) 셀에만 적용 —
+        // 흐림 처리된 채움 셀까지 호버 효과가 뜨면 시선이 분산되기 때문.
+        // 격자선/드롭타겟 외곽선 overlay보다 앞 단계에 두어 그 위에 정상적으로 그려지게 함.
+        .background(cell.inMonth && isHovered ? theme.hover : Color.clear)
         // 오른쪽 세로 1px 격자선 — 단, 마지막 칼럼(토요일)에는 그리지 않아 바깥선 두꺼워짐 방지.
         .overlay(alignment: .trailing) {
             if !isLastCol {

@@ -20,7 +20,7 @@ struct WeekRow: View {
     // 멀티데이 막대 한 줄(트랙)의 시각 높이. EventChip의 종일 박스와 동일.
     private static let trackHeight: CGFloat = 16
     // 트랙 사이 세로 spacing.
-    private static let trackSpacing: CGFloat = 1
+    private static let trackSpacing: CGFloat = 2
     // 셀 padding-top(5) + 날짜 라벨 영역(약 20pt) + chips 영역 padding-top(2) — 첫 트랙의 y 위치.
     // 라벨 영역 높이는 today capsule(minHeight 20)을 기준으로 잡았다. 비-오늘 라벨은 더 작지만
     // 한 그리드 안에 오늘 셀이 있을 수도 있어 일관성을 위해 동일 값으로.

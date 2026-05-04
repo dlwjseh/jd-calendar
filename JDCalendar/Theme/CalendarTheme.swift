@@ -14,13 +14,14 @@ struct CalendarTheme {
     let today: Color       // 오늘 날짜의 배경 캡슐 색
     let todayInk: Color    // 오늘 날짜의 글자 색 (배경이 진하므로 흰색)
     let headerInk: Color   // 요일 헤더(일~토)에서 평일에 쓰는 흐린 글자 색
+    let hover: Color       // 셀 마우스 호버 시 옅은 그레이 틴트(중성 — 강조색 아님)
 
     // 라이트 테마 프리셋 — v1에서는 이것 하나만 사용한다.
     // Color(red:green:blue:)는 0.0~1.0 범위라서 16진수(0x1a 등)를 255로 나눠 변환했다.
     static let light = CalendarTheme(
         bg: Color(red: 0xfd / 255, green: 0xfc / 255, blue: 0xfa / 255),
-        // sidebarBg: 본문보다 살짝 따뜻한 톤 — 보일랑 말랑한 정도. (#FDFCFA → #FBF8F0)
-        sidebarBg: Color(red: 0xfb / 255, green: 0xf8 / 255, blue: 0xf0 / 255),
+        // sidebarBg: 본문보다 살짝 어두운 중성 그레이 — 베이지/웜 톤 제거. (#FDFCFA → #F2F2F2)
+        sidebarBg: Color(red: 0xf2 / 255, green: 0xf2 / 255, blue: 0xf2 / 255),
         fg: Color(red: 0x1a / 255, green: 0x1a / 255, blue: 0x1a / 255),
         // 같은 진한 색을 32% 투명도로 → 흐린 회색 느낌. 별도 회색 토큰을 만들지 않아도 톤이 맞는다.
         muted: Color(red: 0x1a / 255, green: 0x1a / 255, blue: 0x1a / 255).opacity(0.32),
@@ -30,7 +31,9 @@ struct CalendarTheme {
         sat: Color(red: 0x3a / 255, green: 0x7b / 255, blue: 0xd5 / 255),
         today: Color(red: 0xe0 / 255, green: 0x52 / 255, blue: 0x4a / 255),
         todayInk: .white,
-        headerInk: Color(red: 0x1a / 255, green: 0x1a / 255, blue: 0x1a / 255).opacity(0.55)
+        headerInk: Color(red: 0x1a / 255, green: 0x1a / 255, blue: 0x1a / 255).opacity(0.55),
+        // 검정 4% — 격자선(8%)보다 옅게 잡아 호버 박스가 격자선보다 도드라지지 않게.
+        hover: Color.black.opacity(0.04)
     )
 }
 
