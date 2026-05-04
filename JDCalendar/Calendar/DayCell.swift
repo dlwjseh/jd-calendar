@@ -18,6 +18,8 @@ struct DayCell: View {
     let isLastCol: Bool
     // 이 셀 날짜에 표시할 단일일 이벤트들 — 부모(WeekRow)에서 §4.4 필터/§4.5 정렬을 거쳐 넘겨준다.
     let events: [Event]
+    // §5.6 popover용 — 그 날에 걸치는 모든 이벤트(단일일 + 멀티데이), §4.5 정렬 완료.
+    let allEvents: [Event]
     // 이 셀 위로 지나가는 멀티데이 막대의 트랙 수(§4.3) — 그만큼 셀 안에 invisible spacer를 둬서
     // 단일일 chip이 막대 아래에 깔끔히 정렬되도록 한다. 실제 막대는 WeekRow의 overlay가 그린다.
     let multiDayTrackCount: Int
@@ -27,6 +29,8 @@ struct DayCell: View {
     // EVENT_FEATURE.md §3.1 — 셀 더블클릭 시 새 이벤트 시트.
     // 셀마다 자체 sheet 상태를 들고 있지만 SwiftUI 모달은 한 번에 하나만 뜨므로 충돌 없음.
     @State private var showingEditor = false
+    // §5.6 — +M more 클릭 시 그 날의 모든 이벤트 popover.
+    @State private var showingDayPopover = false
 
     private let theme = CalendarTheme.light
 
@@ -76,16 +80,17 @@ struct DayCell: View {
         .padding(.bottom, 4)
         // 이번 달이 아닌 셀은 전체적으로 살짝 투명하게 — 흐리게 표시 효과.
         .opacity(cell.inMonth ? 1 : 0.55)
-        // 빈 영역까지 더블클릭/단일클릭 대상이 되도록 셀 전체에 히트 영역.
+        // 빈 영역까지 더블클릭 대상이 되도록 셀 전체에 히트 영역.
         .contentShape(Rectangle())
-        // §3.1 — 셀 더블클릭으로 새 이벤트 시트 열기. count: 2를 먼저 등록.
+        // §3.1 — 셀 더블클릭으로 새 이벤트 시트 열기.
         .onTapGesture(count: 2) {
             showingEditor = true
         }
-        // §5.1 — 셀의 빈 영역(이벤트 chip이 아닌 곳) single tap 시 선택 해제.
-        // chip 위 클릭은 chip의 onTapGesture가 먼저 잡아서 여기로 propagate되지 않는다.
+        // §5.1 — 셀 빈 영역 single-click은 "consume만" — ContentView outer로 bubble되지 않아
+        // 선택이 해제되지 않게. count: 2와 같이 두기 때문에 셀 빈 영역 자체는 약 250ms double-click
+        // 대기가 있지만 액션이 빈 핸들러라 사용자가 인지할 일 없음. +M more / chip은 자체 핸들러로 처리.
         .onTapGesture(count: 1) {
-            selectedEventId = nil
+            // intentionally empty — consume only.
         }
         // 시트는 셀 단위 — initialDate로 셀 날짜를 넘긴다.
         .sheet(isPresented: $showingEditor) {
@@ -119,7 +124,7 @@ struct DayCell: View {
 
     // 셀 안 단일일 이벤트 목록 — §4.2 트랙 합계 max 3 기준으로 표시 가능 슬롯 계산.
     // 멀티데이 트랙이 3개 이상이면 단일일 chip은 한 개도 못 들어가고, 모자란 만큼 +M more에 합산.
-    // §5.6의 +M more 클릭(셀 세로 확장)은 다음 단계에서 wiring.
+    // +M more 클릭 → §5.6 popover로 그 날의 모든 이벤트 표시.
     @ViewBuilder
     private var eventsList: some View {
         let availableSlots = max(0, Self.maxTracks - multiDayTrackCount)
@@ -133,10 +138,25 @@ struct DayCell: View {
                 EventChip(event: ev, selectedEventId: $selectedEventId)
             }
             if overflow > 0 {
+                // Button 대신 Text + .onTapGesture — Button의 macOS press feedback latency를 피해
+                // popover가 더 즉각적으로 뜬다. Text 자체에 count:1만 있으므로 double-click 대기도 없음.
                 Text("+\(overflow) more")
                     .font(.system(size: 10))
                     .foregroundStyle(theme.muted)
                     .padding(.leading, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        showingDayPopover = true
+                    }
+                    // §5.6 — popover로 그 날의 모든 이벤트(단일일 + 멀티데이) 표시.
+                    // 외부 클릭/Esc로 자동 닫힘은 .popover의 native 동작.
+                    .popover(isPresented: $showingDayPopover, arrowEdge: .top) {
+                        DayEventsPopover(
+                            date: cell.date,
+                            events: allEvents,
+                            selectedEventId: $selectedEventId
+                        )
+                    }
             }
         }
         // 멀티데이 트랙이 없는 셀은 라벨 직후 작은 padding으로 시작.

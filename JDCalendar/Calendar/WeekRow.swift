@@ -12,6 +12,7 @@ struct WeekRow: View {
     let today: Date
     let isLastRow: Bool
     let perDayEvents: [Date: [Event]]            // 단일일 이벤트 (날짜 키)
+    let perDayAllEvents: [Date: [Event]]         // §5.6 popover용 — 단일일 + 멀티데이 모두 (정렬 완료)
     let weekSegments: [MultiDaySegment]          // 이 주의 멀티데이 segment들 (이미 트랙 할당됨)
     let cellTrackCounts: [Int]                   // 7개 — 각 셀이 차지하는 멀티데이 트랙 수
     @Binding var selectedEventId: UUID?
@@ -33,12 +34,14 @@ struct WeekRow: View {
         // 아래 — 셀들. DayCell이 자기 안에서 multiDayTrackCount만큼 자리를 비운다.
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { col in
+                let dayKey = Calendar.current.startOfDay(for: cells[col].date)
                 DayCell(
                     cell: cells[col],
                     today: today,
                     isLastRow: isLastRow,
                     isLastCol: col == 6,
-                    events: perDayEvents[Calendar.current.startOfDay(for: cells[col].date)] ?? [],
+                    events: perDayEvents[dayKey] ?? [],
+                    allEvents: perDayAllEvents[dayKey] ?? [],
                     multiDayTrackCount: cellTrackCounts[col],
                     selectedEventId: $selectedEventId
                 )

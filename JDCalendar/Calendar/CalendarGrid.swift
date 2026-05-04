@@ -24,6 +24,8 @@ struct CalendarGrid: View {
         // §4.4 카테고리 필터를 한 번만 — 단일일/멀티데이가 같이 사용한다.
         let visibleEvents = events.filter { $0.category.isVisible }
         let perDay = singleDayEventsByDay(visibleEvents)
+        // §5.6 popover용 — 그 날에 걸치는 모든 이벤트(단일일 + 멀티데이).
+        let perDayAll = allEventsByDay(visibleEvents)
         let allSegments = MultiDayLayout.buildSegments(events: visibleEvents, cells: cells)
         let trackCounts = MultiDayLayout.cellTrackCounts(segments: allSegments, weekCount: weekCount)
 
@@ -40,6 +42,7 @@ struct CalendarGrid: View {
                     today: today,
                     isLastRow: week == weekCount - 1,
                     perDayEvents: perDay,
+                    perDayAllEvents: perDayAll,
                     weekSegments: weekSegs,
                     cellTrackCounts: weekTracks,
                     selectedEventId: $selectedEventId
@@ -72,6 +75,41 @@ struct CalendarGrid: View {
 
     // §4.5 정렬 함수(단일일 셀 내) — 종일 우선, 그 다음 startAt, 마지막에 createdAt.
     private func eventOrdering(_ lhs: Event, _ rhs: Event) -> Bool {
+        if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
+        if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    // §5.6 popover용 — 그 날(date 키)에 걸치는 모든 이벤트(단일일 + 멀티데이) 묶어 반환.
+    // 정렬은 §4.5 트랙 우선순위: 멀티데이 → 단일일 종일 → 단일일 시간지정 → createdAt 타이.
+    // 멀티데이는 걸치는 모든 날짜에 똑같이 등록된다 — 같은 이벤트가 여러 키에 들어감.
+    private func allEventsByDay(_ visibleEvents: [Event]) -> [Date: [Event]] {
+        var dict: [Date: [Event]] = [:]
+        let cal = Calendar.current
+
+        for ev in visibleEvents {
+            let startDay = cal.startOfDay(for: ev.startAt)
+            // endAt은 배타적이라 1초 빼서 "포함되는 마지막 날"의 startOfDay.
+            let endDay = cal.startOfDay(for: ev.endAt.addingTimeInterval(-1))
+            var day = startDay
+            while day <= endDay {
+                dict[day, default: []].append(ev)
+                guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
+        }
+
+        for key in dict.keys {
+            dict[key]?.sort(by: popoverOrdering)
+        }
+        return dict
+    }
+
+    // §4.5 — popover 내 이벤트 정렬: 멀티데이 → 단일일 종일 → 단일일 시간지정 → createdAt 타이.
+    private func popoverOrdering(_ lhs: Event, _ rhs: Event) -> Bool {
+        let lhsMulti = MultiDayLayout.isMultiDay(lhs)
+        let rhsMulti = MultiDayLayout.isMultiDay(rhs)
+        if lhsMulti != rhsMulti { return lhsMulti }
         if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
         if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
         return lhs.createdAt < rhs.createdAt

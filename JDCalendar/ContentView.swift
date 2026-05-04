@@ -51,6 +51,13 @@ struct ContentView: View {
         .foregroundStyle(theme.fg)
         // 타이틀바를 숨겼으므로 콘텐츠가 창 가장자리(safe area)를 무시하고 끝까지 그려지게 한다.
         .ignoresSafeArea()
+        // §5.1 글로벌 background tap — 셀/chip/버튼 등 자식이 잡지 않은 빈 영역 클릭 시 선택 해제.
+        // DayCell 안에 single tap을 두면 .onTapGesture(count:2)와 충돌해 250ms 지연이 발생하므로
+        // 모든 single-click 응답성을 위해 outer 한 군데에서만 처리한다.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedEventId = nil
+        }
         // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 트리거 자리.
         .task {
             EventCategory.seedIfNeeded(in: modelContext)
