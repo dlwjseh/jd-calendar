@@ -23,8 +23,8 @@ struct JDCalendarApp: App {
         // hiddenTitleBar: 타이틀바 막대를 숨김 — 신호등 3개는 콘텐츠 위에 그대로 떠 있음.
         .windowStyle(.hiddenTitleBar)
         // SwiftData 컨테이너 부착 — 이 모디파이어가 앱 전체에 ModelContext를 환경값으로 흘려준다.
-        // 이벤트 모델이 추가되면 배열에 같이 넣는다(EVENT_FEATURE.md 작업 시).
+        // 카테고리·이벤트 모델을 같은 컨테이너에 등록(EVENT_FEATURE.md §2).
         // 저장 위치는 기본값 ~/Library/Application Support/com.jd.JDCalendar/default.store.
-        .modelContainer(for: [EventCategory.self])
+        .modelContainer(for: [EventCategory.self, Event.self])
     }
 }

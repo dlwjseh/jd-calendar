@@ -33,6 +33,12 @@ final class EventCategory {
     // 다음 실행에도 유지하기로 했으므로(Q-1 결정) 모델 필드로 저장한다.
     var isVisible: Bool
 
+    // 이 카테고리에 속한 이벤트들 — EVENT_FEATURE.md §1.4.
+    // deleteRule: .cascade → 카테고리 삭제 시 그 카테고리의 이벤트도 함께 삭제(CATEGORY_FEATURE.md §1/§8).
+    // inverse는 Event.category — 이쪽에서 inverse를 선언하면 SwiftData가 양방향을 자동 관리한다.
+    @Relationship(deleteRule: .cascade, inverse: \Event.category)
+    var events: [Event] = []
+
     // 기본 생성자 — 모든 필드를 받지만 실용적인 디폴트를 깔아둠.
     // id/createdAt/isVisible은 호출자에서 명시 안 해도 자연스러운 값으로 채워진다.
     init(
