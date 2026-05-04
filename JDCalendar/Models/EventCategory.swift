@@ -33,6 +33,12 @@ final class EventCategory {
     // 다음 실행에도 유지하기로 했으므로(Q-1 결정) 모델 필드로 저장한다.
     var isVisible: Bool
 
+    // 시스템(앱)이 자동 생성/관리하는 카테고리인지 여부.
+    // true면 사용자는 색상점 토글(보이기/숨기기)만 할 수 있고 편집/삭제는 불가 — UI(CategoryRow)가 강제.
+    // 예: 한국천문연구원 API에서 가져오는 "공휴일" 카테고리.
+    // 새 필드라 기본값 false 를 둬서 SwiftData lightweight migration 시 기존 행이 자동 채워지도록.
+    var isSystemManaged: Bool = false
+
     // 이 카테고리에 속한 이벤트들 — EVENT_FEATURE.md §1.4.
     // deleteRule: .cascade → 카테고리 삭제 시 그 카테고리의 이벤트도 함께 삭제(CATEGORY_FEATURE.md §1/§8).
     // inverse는 Event.category — 이쪽에서 inverse를 선언하면 SwiftData가 양방향을 자동 관리한다.
@@ -40,14 +46,15 @@ final class EventCategory {
     var events: [Event] = []
 
     // 기본 생성자 — 모든 필드를 받지만 실용적인 디폴트를 깔아둠.
-    // id/createdAt/isVisible은 호출자에서 명시 안 해도 자연스러운 값으로 채워진다.
+    // id/createdAt/isVisible/isSystemManaged 는 호출자에서 명시 안 해도 자연스러운 값으로 채워진다.
     init(
         id: UUID = UUID(),
         name: String,
         color: String,
         note: String = "",
         createdAt: Date = Date(),
-        isVisible: Bool = true
+        isVisible: Bool = true,
+        isSystemManaged: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -55,6 +62,7 @@ final class EventCategory {
         self.note = note
         self.createdAt = createdAt
         self.isVisible = isVisible
+        self.isSystemManaged = isSystemManaged
     }
 }
 

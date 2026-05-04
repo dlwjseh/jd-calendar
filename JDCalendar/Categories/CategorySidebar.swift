@@ -38,12 +38,19 @@ struct CategorySidebar: View {
 
     // 카테고리 행 목록. 행이 많아질 때를 대비해 스크롤뷰 + LazyVStack으로 감싼다.
     private var list: some View {
-        ScrollView {
+        // 8.1: "마지막 1개 카테고리는 삭제 불가" — 사용자 카테고리만 세는 게 의미상 정확.
+        // 시스템 카테고리(공휴일 등)는 어차피 메뉴가 숨겨져 삭제 불가이므로 카운트에 넣지 않는다.
+        let userCategoryCount = categories.filter { !$0.isSystemManaged }.count
+
+        return ScrollView {
             LazyVStack(spacing: 0) {
                 // SwiftData @Model에 우리가 정의한 id: UUID를 명시적으로 지정해 ForEach 식별 키로 사용.
                 ForEach(categories, id: \.id) { cat in
-                    // isLastCategory: 8.1 정책상 마지막 1개는 삭제 불가 — 메뉴 비활성용 신호.
-                    CategoryRow(category: cat, isLastCategory: categories.count == 1)
+                    // isLastCategory: 사용자 카테고리이면서 그 수가 1이면 true — 그 항목의 삭제 메뉴가 비활성된다.
+                    CategoryRow(
+                        category: cat,
+                        isLastCategory: !cat.isSystemManaged && userCategoryCount == 1
+                    )
                 }
             }
         }

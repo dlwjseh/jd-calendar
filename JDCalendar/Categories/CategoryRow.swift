@@ -47,15 +47,19 @@ struct CategoryRow: View {
         // 호버 강조 톤 페이드 — 갑자기 켜고 꺼지는 대신 살짝의 보간.
         .animation(.easeInOut(duration: 0.12), value: hovered)
         // 우클릭(혹은 Control+클릭) 시 컨텍스트 메뉴 — 5.3.
+        // 시스템 관리 카테고리(예: 공휴일)는 편집/삭제 모두 막혀 있으므로 메뉴 자체를 띄우지 않는다.
+        // (@ViewBuilder 가 빈 결과를 반환하면 SwiftUI 가 컨텍스트 메뉴를 등록하지 않음.)
         .contextMenu {
-            Button("편집") {
-                showingEditor = true
+            if !category.isSystemManaged {
+                Button("편집") {
+                    showingEditor = true
+                }
+                // 8.1: 마지막 1개 카테고리는 삭제 불가 — 메뉴 항목 자체를 비활성.
+                Button("삭제", role: .destructive) {
+                    showingDeleteAlert = true
+                }
+                .disabled(isLastCategory)
             }
-            // 8.1: 마지막 1개 카테고리는 삭제 불가 — 메뉴 항목 자체를 비활성.
-            Button("삭제", role: .destructive) {
-                showingDeleteAlert = true
-            }
-            .disabled(isLastCategory)
         }
         // 편집 시트 — CategoryEditor에 기존 카테고리를 넘겨 편집 모드로 띄움.
         .sheet(isPresented: $showingEditor) {

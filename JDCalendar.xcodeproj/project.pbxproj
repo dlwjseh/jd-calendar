@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		69865E912FA86E73005E3437 /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 69865E902FA86E73005E3437 /* Secrets.xcconfig */; };
+		69865E932FA86E7E005E3437 /* Secrets.example.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 69865E922FA86E7E005E3437 /* Secrets.example.xcconfig */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		69865E902FA86E73005E3437 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		69865E922FA86E7E005E3437 /* Secrets.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.example.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A100000000000000000000A1 /* JDCalendar */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -28,6 +38,8 @@
 		A100000000000000000000C1 = {
 			isa = PBXGroup;
 			children = (
+				69865E922FA86E7E005E3437 /* Secrets.example.xcconfig */,
+				69865E902FA86E73005E3437 /* Secrets.xcconfig */,
 				A100000000000000000000A1 /* JDCalendar */,
 				A100000000000000000000C2 /* Products */,
 			);
@@ -104,6 +116,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				69865E932FA86E7E005E3437 /* Secrets.example.xcconfig in Resources */,
+				69865E912FA86E73005E3437 /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -122,6 +136,7 @@
 /* Begin XCBuildConfiguration section */
 		A1000000000000000000F101 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 69865E902FA86E73005E3437 /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -176,6 +191,7 @@
 		};
 		A1000000000000000000F102 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 69865E902FA86E73005E3437 /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -222,6 +238,7 @@
 		};
 		A1000000000000000000F201 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 69865E902FA86E73005E3437 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -230,8 +247,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JDCalendar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "JD Calendar";
+				INFOPLIST_KEY_KASIServiceKey = "";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -249,6 +268,7 @@
 		};
 		A1000000000000000000F202 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 69865E902FA86E73005E3437 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -257,8 +277,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JDCalendar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "JD Calendar";
+				INFOPLIST_KEY_KASIServiceKey = "";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;

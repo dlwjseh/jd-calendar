@@ -78,10 +78,14 @@ struct ContentView: View {
                     selectedEventId = nil
                 }
         )
-        // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 + 팔레트 마이그레이션.
+        // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 + 팔레트 마이그레이션 + 공휴일 동기화.
+        // 순서가 중요: seed 가 먼저여야 첫 실행 시 "기본" 사용자 카테고리가 만들어진다.
+        // (공휴일 sync 가 먼저 돌면 "공휴일" 카테고리만 존재해서 seed 가 no-op 으로 끝난다.)
         .task {
             EventCategory.seedIfNeeded(in: modelContext)
             EventCategory.migratePaletteIfNeeded(in: modelContext)
+            // 일별 1회 휴일 갱신. UserDefaults 의 마지막 sync 일자가 오늘이면 내부에서 즉시 반환.
+            await HolidaySyncService.syncIfNeeded(in: modelContext)
         }
         // §6.2 — 가로 스와이프 월 이동: monitor에 prev/next callback을 wire하고 시작.
         .onAppear {
@@ -91,6 +95,19 @@ struct ContentView: View {
         }
         .onDisappear {
             swipeMonitor.stop()
+        }
+        // cursor 가 움직일 때마다 그리드가 보여주는 연도들을 ensure.
+        // year 가 아니라 month 를 watch 하는 이유: 같은 해 안에서 12월↔1월 으로 이동할 때도
+        // spillover 연도가 달라지기 때문에 — month 변화가 모든 cursor 이동을 빠짐없이 잡는다.
+        // ±1 daily 범위 안 / 이미 fetch 한 연도는 HolidaySyncService 안에서 즉시 no-op 처리.
+        .onChange(of: month) { _, _ in
+            Task {
+                await HolidaySyncService.ensureYearsForCursor(
+                    year: year,
+                    month: month,
+                    in: modelContext
+                )
+            }
         }
         // 글로벌 키 핸들러 — Esc(선택 해제), Delete/Backspace(선택된 이벤트 삭제 요청).
         // .background에 hidden 버튼 + .keyboardShortcut으로 등록하는 SwiftUI macOS 관용 패턴.

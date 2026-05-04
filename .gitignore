@@ -19,6 +19,9 @@ Package.resolved
 # Claude Code 로컬 설정 (개인 환경)
 .claude/
 
+# API 키 등 비밀값 — 실제 키 파일은 커밋 금지, .example 템플릿만 커밋
+Secrets.xcconfig
+
 # 기타
 *.swp
 *.swo
