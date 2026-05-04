@@ -78,9 +78,10 @@ struct ContentView: View {
                     selectedEventId = nil
                 }
         )
-        // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 트리거 자리.
+        // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 + 팔레트 마이그레이션.
         .task {
             EventCategory.seedIfNeeded(in: modelContext)
+            EventCategory.migratePaletteIfNeeded(in: modelContext)
         }
         // §6.2 — 가로 스와이프 월 이동: monitor에 prev/next callback을 wire하고 시작.
         .onAppear {

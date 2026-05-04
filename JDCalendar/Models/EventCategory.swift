@@ -63,7 +63,15 @@ final class EventCategory {
 extension EventCategory {
     // 3번 섹션이 정한 기본값 — 사용자가 바꿀 수 있으므로 "초기값"이라는 표현이 맞다.
     static let seedName = "기본"
-    static let seedColor = "#BFBFBF"
+    // 새 파스텔 팔레트의 sky(#A4C8E8) — 차분한 톤이라 첫 카테고리 색으로 무난.
+    static let seedColor = "#A4C8E8"
+
+    // 팔레트 교체 전 사용되던 10색의 hex. 이 hex들과 정확히 일치하는 카테고리만
+    // 새 팔레트의 가장 가까운 색으로 자동 변경한다. 사용자 자유 색은 건드리지 않는다.
+    static let legacyPaletteHexes: Set<String> = [
+        "#C8483D", "#D67857", "#BFA13A", "#8C9B55", "#3F8C85",
+        "#4A7DBE", "#5C5FA8", "#C46881", "#8A7E73", "#BFBFBF",
+    ]
 
     // ModelContext 안의 카테고리가 비어 있으면 기본 카테고리 한 건을 삽입한다.
     // 4.2: 별도 firstLaunch 플래그 없음. 비어 있다는 사실 자체가 트리거(idempotent).
@@ -81,6 +89,25 @@ extension EventCategory {
             // 슬라이스 1 검증용 로그 — 슬라이스 2에서 사이드바가 실제로 목록을 보여주면 제거한다.
             let summary = existing.map { "\($0.name)/\($0.color)" }.joined(separator: ", ")
             print("[JDCalendar] existing categories(\(existing.count)): \(summary)")
+        }
+    }
+
+    // 구 팔레트 hex와 정확히 일치하는 카테고리 색을 새 팔레트의 가장 가까운 색으로 변경.
+    // - 자유 색 픽으로 만들어진 색(legacyPaletteHexes 외)은 손대지 않는다.
+    // - 이미 새 팔레트 색이거나 자유 색인 경우 no-op (idempotent).
+    static func migratePaletteIfNeeded(in context: ModelContext) {
+        let descriptor = FetchDescriptor<EventCategory>()
+        guard let existing = try? context.fetch(descriptor) else { return }
+
+        var migrated = 0
+        for cat in existing where legacyPaletteHexes.contains(cat.color.uppercased()) {
+            let newHex = CategoryPalette.nearest(toHex: cat.color)
+            print("[JDCalendar] migrate category color: \(cat.name) \(cat.color) → \(newHex)")
+            cat.color = newHex
+            migrated += 1
+        }
+        if migrated > 0 {
+            try? context.save()
         }
     }
 }

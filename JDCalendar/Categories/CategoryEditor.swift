@@ -75,19 +75,25 @@ struct CategoryEditor: View {
         )
     }
 
-    // 색상 영역 — 5+6 그리드(상단 5스와치 / 하단 5스와치 + ⊕ 자유 색).
+    // 색상 영역 — 4 cols × 3 rows의 12색 + 마지막 행에 자유 색(⊕) 한 칸 추가.
     private var colorPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
+            paletteRow(0..<4)
+            paletteRow(4..<8)
             HStack(spacing: 10) {
-                ForEach(CategoryPalette.all.prefix(5), id: \.index) { swatch in
-                    swatchView(swatch)
-                }
-            }
-            HStack(spacing: 10) {
-                ForEach(CategoryPalette.all.suffix(5), id: \.index) { swatch in
+                ForEach(Array(CategoryPalette.all[8..<12]), id: \.index) { swatch in
                     swatchView(swatch)
                 }
                 customSwatchView
+            }
+        }
+    }
+
+    // 한 행에 4개의 팔레트 스와치를 가로로 나열 — colorPicker에서 0~7번을 두 행으로 그릴 때 재사용.
+    private func paletteRow(_ range: Range<Int>) -> some View {
+        HStack(spacing: 10) {
+            ForEach(Array(CategoryPalette.all[range]), id: \.index) { swatch in
+                swatchView(swatch)
             }
         }
     }

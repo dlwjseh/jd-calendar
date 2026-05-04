@@ -34,7 +34,7 @@ struct CalendarTheme {
     )
 }
 
-// 카테고리 색상 팔레트 — CATEGORY_FEATURE.md 5.7 잠금.
+// 카테고리 색상 팔레트 — 파스텔 12색.
 // 사용자에게 노출되는 라벨은 색 자체이므로 key는 코드 식별/디버깅 용도.
 struct CategoryPalette {
     // 팔레트 한 칸의 정보 — 표시 순서(index), 코드 키, hex 문자열만 들고 있는다.
@@ -44,19 +44,53 @@ struct CategoryPalette {
         let hex: String
     }
 
-    // 5.7 표 그대로 — Brick부터 Light Gray까지 10색.
+    // 4 cols × 3 rows로 표시되는 12색. 따뜻한 색(노랑→주황→핑크) → 핑크/보라 → 차가운 색(블루→그린) 순.
     static let all: [Swatch] = [
-        Swatch(index: 1,  key: "brick",     hex: "#C8483D"),
-        Swatch(index: 2,  key: "coral",     hex: "#D67857"),
-        Swatch(index: 3,  key: "mustard",   hex: "#BFA13A"),
-        Swatch(index: 4,  key: "olive",     hex: "#8C9B55"),
-        Swatch(index: 5,  key: "teal",      hex: "#3F8C85"),
-        Swatch(index: 6,  key: "slate",     hex: "#4A7DBE"),
-        Swatch(index: 7,  key: "indigo",    hex: "#5C5FA8"),
-        Swatch(index: 8,  key: "rose",      hex: "#C46881"),
-        Swatch(index: 9,  key: "stone",     hex: "#8A7E73"),
-        Swatch(index: 10, key: "lightGray", hex: "#BFBFBF"),
+        Swatch(index: 1,  key: "butter",   hex: "#F6C67A"),
+        Swatch(index: 2,  key: "apricot",  hex: "#F0A274"),
+        Swatch(index: 3,  key: "salmon",   hex: "#F09372"),
+        Swatch(index: 4,  key: "coral",    hex: "#EF888C"),
+        Swatch(index: 5,  key: "blush",    hex: "#ED9FB9"),
+        Swatch(index: 6,  key: "magenta",  hex: "#DF85A8"),
+        Swatch(index: 7,  key: "orchid",   hex: "#DE9FD6"),
+        Swatch(index: 8,  key: "lavender", hex: "#A3AFE1"),
+        Swatch(index: 9,  key: "sky",      hex: "#A4C8E8"),
+        Swatch(index: 10, key: "aqua",     hex: "#9BD8DD"),
+        Swatch(index: 11, key: "mint",     hex: "#81C8BA"),
+        Swatch(index: 12, key: "lime",     hex: "#BEDA83"),
     ]
+
+    // 주어진 hex와 RGB 거리(유클리드) 가장 가까운 팔레트 색의 hex를 반환.
+    // 팔레트 교체 시 기존 색을 새 팔레트로 매핑하기 위해 사용.
+    static func nearest(toHex hex: String) -> String {
+        let target = parseRGB(hex)
+        var bestHex = all[0].hex
+        var bestDist = Double.infinity
+        for swatch in all {
+            let rgb = parseRGB(swatch.hex)
+            let dr = Double(rgb.r - target.r)
+            let dg = Double(rgb.g - target.g)
+            let db = Double(rgb.b - target.b)
+            let dist = dr*dr + dg*dg + db*db
+            if dist < bestDist {
+                bestDist = dist
+                bestHex = swatch.hex
+            }
+        }
+        return bestHex
+    }
+
+    // hex → (r,g,b). 형식이 깨지면 (0,0,0) — 호출 측이 정상 hex만 넘긴다고 가정.
+    private static func parseRGB(_ hex: String) -> (r: Int, g: Int, b: Int) {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        var rgb: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&rgb)
+        return (
+            Int((rgb & 0xFF0000) >> 16),
+            Int((rgb & 0x00FF00) >> 8),
+            Int(rgb & 0x0000FF)
+        )
+    }
 }
 
 // 카테고리 색상은 hex 문자열로 저장되므로(자유 색까지 받기 위함, 1번 참조) 매번 Color로 바꿔주는 헬퍼.
