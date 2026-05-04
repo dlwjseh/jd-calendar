@@ -13,6 +13,8 @@ struct CategoryRow: View {
     // 우클릭 메뉴에서 시트/얼럿을 띄우기 위한 자체 상태.
     @State private var showingEditor = false
     @State private var showingDeleteAlert = false
+    // 마우스가 행 위에 올라왔는지 — true면 행 배경이 살짝 강조된다.
+    @State private var hovered = false
 
     private let theme = CalendarTheme.light
 
@@ -30,9 +32,20 @@ struct CategoryRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        // contentShape: 빈 영역(Spacer)도 우클릭 대상이 되도록 행 전체에 히트 영역을 깐다.
+        .padding(.vertical, 4)
+        // 호버 강조 — 다른 버튼들과 같은 theme.line 톤으로 행 배경에 둥근 직사각형을 깐다.
+        // 좌·우 4pt 인셋으로 사이드바 가장자리에 딱 붙지 않게 — Finder/Mail의 사이드바 행 강조 톤.
+        .background {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(hovered ? theme.line : .clear)
+                .padding(.horizontal, 4)
+        }
+        // contentShape: 빈 영역(Spacer)도 우클릭/호버 대상이 되도록 행 전체에 히트 영역을 깐다.
         .contentShape(Rectangle())
+        // 호버 진입/이탈에 따라 hovered 토글 — 아래 .background가 자동으로 다시 그려진다.
+        .onHover { hovered = $0 }
+        // 호버 강조 톤 페이드 — 갑자기 켜고 꺼지는 대신 살짝의 보간.
+        .animation(.easeInOut(duration: 0.12), value: hovered)
         // 우클릭(혹은 Control+클릭) 시 컨텍스트 메뉴 — 5.3.
         .contextMenu {
             Button("편집") {
@@ -65,7 +78,7 @@ struct CategoryRow: View {
     // 5.3: 색상 점이 체크박스 역할.
     // 체크(보이기): 카테고리 색으로 꽉 찬 원.
     // 해제(숨기기): 같은 색의 외곽 링만 — 색은 유지해서 어떤 카테고리인지 식별은 가능.
-    // 클릭 영역은 시각적 12pt 원 주변에 padding 8pt를 더해 28pt 정사각형 — 작은 점도 클릭하기 쉽도록.
+    // 클릭 영역은 시각적 14pt 원 주변에 padding 7pt를 더해 28pt 정사각형 — 작은 점도 클릭하기 쉽도록.
     private var colorDotCheckbox: some View {
         Group {
             if category.isVisible {
@@ -76,9 +89,9 @@ struct CategoryRow: View {
                     .strokeBorder(Color(hex: category.color), lineWidth: 1.5)
             }
         }
-        .frame(width: 12, height: 12)
-        // padding 8 → 28x28 히트 영역. HStack spacing 0 + 이 padding의 우측 8 = 텍스트와의 시각적 간격 8pt 유지.
-        .padding(8)
+        .frame(width: 14, height: 14)
+        // padding 7 → 28x28 히트 영역. HStack spacing 0 + 이 padding의 우측 7 = 텍스트와의 시각적 간격 7pt.
+        .padding(7)
         .contentShape(Rectangle())
         .onTapGesture {
             // SwiftData @Model의 프로퍼티를 바꾸면 자동으로 변경 추적·저장됨.

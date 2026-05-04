@@ -178,9 +178,11 @@ struct CategoryEditor: View {
                 Text("노트 (옵션)")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.muted)
-                    // padding을 TextEditor 내부 텍스트 위치와 맞춤. 대략 12/14pt 안쪽.
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 16)
+                    // TextEditor 내부 텍스트 시작 위치에 맞춤:
+                    // - 가로: 외곽 padding 8 + NSTextView lineFragmentPadding ≈ 5 = 13
+                    // - 세로: 외곽 padding 8 + NSTextView textContainer top inset ≈ 0 = 8
+                    .padding(.leading, 13)
+                    .padding(.top, 8)
                     .allowsHitTesting(false)
             }
         }
