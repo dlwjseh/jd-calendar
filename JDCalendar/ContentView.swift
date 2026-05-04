@@ -66,10 +66,18 @@ struct ContentView: View {
         // §5.1 글로벌 background tap — 셀/chip/버튼 등 자식이 잡지 않은 빈 영역 클릭 시 선택 해제.
         // DayCell 안에 single tap을 두면 .onTapGesture(count:2)와 충돌해 250ms 지연이 발생하므로
         // 모든 single-click 응답성을 위해 outer 한 군데에서만 처리한다.
-        .contentShape(Rectangle())
-        .onTapGesture {
-            selectedEventId = nil
-        }
+        //
+        // .background로 깔아야 하는 이유: 외곽 VStack에 직접 .onTapGesture를 걸면
+        // 자식 Button(.buttonStyle(.plain))과 제스처 중재가 충돌해 macOS에서 클릭이 묻히는
+        // 사례가 있음(특히 사이드바 토글). background 레이어는 자식 hit 영역에 가려지고
+        // 빈 영역에서만 발화하므로 Button과 경쟁하지 않는다.
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedEventId = nil
+                }
+        )
         // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 트리거 자리.
         .task {
             EventCategory.seedIfNeeded(in: modelContext)
