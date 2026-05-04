@@ -24,6 +24,9 @@ struct ContentView: View {
     // chip 자체의 우클릭 삭제는 chip 안에서 처리하지만, 글로벌 키 핸들러(Delete)는 여기서.
     @State private var pendingDeleteEvent: Event? = nil
 
+    // §6.2 — 가로 스와이프로 월 이동을 처리하는 NSEvent monitor.
+    @StateObject private var swipeMonitor = MonthSwipeMonitor()
+
     private let theme = CalendarTheme.light
 
     // init: 앱이 시작되면 무조건 "오늘이 속한 달"로 초기화한다.
@@ -61,6 +64,15 @@ struct ContentView: View {
         // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 트리거 자리.
         .task {
             EventCategory.seedIfNeeded(in: modelContext)
+        }
+        // §6.2 — 가로 스와이프 월 이동: monitor에 prev/next callback을 wire하고 시작.
+        .onAppear {
+            swipeMonitor.onPrev = prev
+            swipeMonitor.onNext = next
+            swipeMonitor.start()
+        }
+        .onDisappear {
+            swipeMonitor.stop()
         }
         // 글로벌 키 핸들러 — Esc(선택 해제), Delete/Backspace(선택된 이벤트 삭제 요청).
         // .background에 hidden 버튼 + .keyboardShortcut으로 등록하는 SwiftUI macOS 관용 패턴.

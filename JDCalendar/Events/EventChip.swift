@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 // 셀 안에 한 이벤트를 표시하는 작은 컴포넌트.
 // EVENT_FEATURE.md §4.1 — 종일/시간지정에 따라 두 가지 모양.
@@ -49,6 +50,14 @@ struct EventChip: View {
         }
         // 빈 영역까지 클릭 가능하도록 chip 전체에 히트 영역.
         .contentShape(Rectangle())
+        // §6.1 — 드래그로 날짜 이동. payload는 event.id 문자열, drop 처리는 DayCell이.
+        // SwiftUI 기본 drag preview(반투명 snapshot)를 그대로 사용.
+        .draggable(event.id.uuidString)
+        // chip 위 hover 시 마우스 커서를 기본 화살표로 고정 — Text view 기본 i-beam이나
+        // .draggable의 시스템 hand 커서로 바뀌지 않도록(사용자 요청).
+        .onHover { hovering in
+            if hovering { NSCursor.arrow.push() } else { NSCursor.pop() }
+        }
         // 더블 클릭 = 편집 시트(§5.1). count: 2를 먼저 등록해야 single과 충돌 시 우선.
         .onTapGesture(count: 2) {
             selectedEventId = event.id

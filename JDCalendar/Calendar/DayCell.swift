@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 // 한 칸(하루)을 그리는 데 필요한 최소 정보.
 // Hashable을 채택한 이유: SwiftUI의 ForEach/diff 비교에 쓰기 좋게 하기 위함.
@@ -31,6 +32,11 @@ struct DayCell: View {
     @State private var showingEditor = false
     // §5.6 — +M more 클릭 시 그 날의 모든 이벤트 popover.
     @State private var showingDayPopover = false
+    // §6.1 — 드래그된 이벤트가 이 셀 위에 있을 때 외곽 강조용 플래그.
+    @State private var isDropTarget = false
+
+    // §6.1 — 드롭된 이벤트를 fetch / 저장하기 위한 컨텍스트.
+    @Environment(\.modelContext) private var modelContext
 
     private let theme = CalendarTheme.light
 
@@ -92,6 +98,16 @@ struct DayCell: View {
         .onTapGesture(count: 1) {
             // intentionally empty — consume only.
         }
+        // §6.1 — 다른 chip/막대를 끌어와 이 셀에 드롭하면 그 이벤트의 날짜를 평행 이동.
+        // payload는 event.id 문자열.
+        .dropDestination(for: String.self) { items, _ in
+            guard let idString = items.first,
+                  let id = UUID(uuidString: idString) else { return false }
+            moveEvent(id: id, to: cell.date)
+            return true
+        } isTargeted: { hovering in
+            isDropTarget = hovering
+        }
         // 시트는 셀 단위 — initialDate로 셀 날짜를 넘긴다.
         .sheet(isPresented: $showingEditor) {
             EventEditor(initialDate: cell.date)
@@ -107,6 +123,38 @@ struct DayCell: View {
             if !isLastRow {
                 Rectangle().fill(theme.line).frame(height: 1)
             }
+        }
+        // §6.1 — 드래그된 항목이 이 셀 위에 호버 중이면 외곽 강조(theme.fg, 2pt).
+        .overlay {
+            if isDropTarget {
+                Rectangle()
+                    .strokeBorder(theme.fg, lineWidth: 2)
+            }
+        }
+    }
+
+    // §6.1 — 드롭된 이벤트를 새 시작 날짜로 평행 이동(시각·길이 보존).
+    // - 멀티데이는 startAt/endAt 둘 다 같은 일 수만큼 shift → 길이 자동 유지.
+    // - 같은 시작 날짜에 드롭하면 변경 없음(noop).
+    // - 드롭 즉시 저장 — 확인 다이얼로그 없음(§6.1).
+    // - withAnimation으로 chip의 사라짐/등장이 부드럽게 페이드.
+    private func moveEvent(id: UUID, to targetDay: Date) {
+        let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == id })
+        guard let ev = try? modelContext.fetch(descriptor).first else { return }
+
+        let cal = Calendar.current
+        let originDay = cal.startOfDay(for: ev.startAt)
+        let target = cal.startOfDay(for: targetDay)
+        let delta = cal.dateComponents([.day], from: originDay, to: target).day ?? 0
+        guard delta != 0 else { return }
+
+        if let newStart = cal.date(byAdding: .day, value: delta, to: ev.startAt),
+           let newEnd = cal.date(byAdding: .day, value: delta, to: ev.endAt) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                ev.startAt = newStart
+                ev.endAt = newEnd
+            }
+            try? modelContext.save()
         }
     }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 // 멀티데이 이벤트의 한 segment(주 한 줄)를 그리는 가로 막대.
 // EVENT_FEATURE.md §4.3 — 종일/시간지정 둘 다 같은 모양: 카테고리 색 박스 + 좌측 정렬 제목.
@@ -43,6 +44,13 @@ struct MultiDayBar: View {
             }
         }
         .contentShape(Rectangle())
+        // §6.1 — 드래그로 날짜 이동. 막대의 어느 위치를 잡아도 startAt 기준으로 평행 이동.
+        // payload는 event.id 문자열, drop 처리는 DayCell이.
+        .draggable(event.id.uuidString)
+        // 막대 위 hover 시 마우스 커서를 기본 화살표로 고정 (사용자 요청).
+        .onHover { hovering in
+            if hovering { NSCursor.arrow.push() } else { NSCursor.pop() }
+        }
         // 더블 클릭 = 편집(§5.1).
         .onTapGesture(count: 2) {
             selectedEventId = event.id
