@@ -86,11 +86,12 @@ struct EventEditor: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(theme.fg)
 
-            categoryRow
+            // 라벨 컬럼이 있는 행은 labeledRow(...)로, 라벨 없는 풀폭 행(제목/메모)은 그대로.
+            labeledRow("카테고리") { categoryChips }
             titleRow
-            allDayToggle
-            dateRow(label: "시작", date: $startAt)
-            dateRow(label: "종료", date: $endAt)
+            labeledRow("종일") { allDayToggleControl }
+            labeledRow("시작") { dateAndTimeControls(date: $startAt) }
+            labeledRow("종료") { dateAndTimeControls(date: $endAt) }
             noteSection
             buttonRow
         }
@@ -138,44 +139,62 @@ struct EventEditor: View {
         editing.map { "\"\($0.title)\"을 삭제할까요?" } ?? ""
     }
 
-    // 카테고리 줄 — Menu로 직접 그려 색 점이 드롭다운 아이템에도 보이게.
-    // SwiftUI Picker(.menu)는 macOS에서 색 원이 잘 안 그려져서 Menu 사용.
-    private var categoryRow: some View {
-        Menu {
-            ForEach(categories, id: \.id) { cat in
-                Button {
-                    selectedCategory = cat
-                } label: {
-                    HStack(spacing: 6) {
-                        Circle().fill(Color(hex: cat.color)).frame(width: 10, height: 10)
-                        Text(cat.name)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                if let cat = selectedCategory {
-                    Circle().fill(Color(hex: cat.color)).frame(width: 10, height: 10)
-                    Text(cat.name).foregroundStyle(theme.fg)
-                } else {
-                    Text("카테고리").foregroundStyle(theme.muted)
-                }
-                Spacer()
-                // 드롭다운임을 알리는 인디케이터.
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.fg.opacity(0.5))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6).stroke(theme.line, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
+    // "카테고리/종일/시작/종료" 라벨 컬럼이 있는 행 공통 — 좌측에 56pt 라벨, 우측에 콘텐츠.
+    // 4개 행이 시각적으로 같은 X에서 시작하도록 라벨 폭을 고정한다.
+    // alignment .center는 HStack 기본값이지만 명시적으로 표시 — 행 콘텐츠(특히 stepperField)가
+    // 라벨보다 키가 크므로 라벨이 행 중앙에 오도록 보장.
+    @ViewBuilder
+    private func labeledRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundStyle(theme.fg.opacity(0.75))
+                .frame(width: 56, alignment: .leading)
+            content()
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // 카테고리 가로 칩 행. 카테고리 수가 많아 폭을 넘으면 가로 스크롤.
+    // 선택된 칩은 pill outline 강조, 나머지는 라벨만(외곽선 없음) — 디자인 §3.3 갱신.
+    private var categoryChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(categories, id: \.id) { cat in
+                    categoryChip(for: cat)
+                }
+            }
+        }
+    }
+
+    // 칩 한 개 — [색 점] [이름]. 선택 시 옅은 배경으로 강조(외곽선 대신 fill).
+    private func categoryChip(for cat: EventCategory) -> some View {
+        let isSelected = selectedCategory?.id == cat.id
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(Color(hex: cat.color))
+                .frame(width: 8, height: 8)
+            Text(cat.name)
+                .font(.system(size: 13))
+                .foregroundStyle(theme.fg)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        // 선택 시 배경을 카테고리 색의 매우 옅은 톤으로 채우고 capsule border를 같은 색의 진한 톤으로.
+        // 진한 외곽선보다 부드럽고, 선택 카테고리 색이 칩 자체에서도 미묘하게 보인다.
+        .background {
+            if isSelected {
+                Capsule().fill(Color(hex: cat.color).opacity(0.18))
+            }
+        }
+        .overlay {
+            if isSelected {
+                Capsule().stroke(Color(hex: cat.color).opacity(0.6), lineWidth: 1)
+            }
+        }
+        .contentShape(Capsule())
+        .onTapGesture {
+            selectedCategory = cat
+        }
     }
 
     // 제목 줄 — 좌측에 카테고리 색 점(표시 전용, §3.3.2) + 한 줄 텍스트 필드.
@@ -197,38 +216,77 @@ struct EventEditor: View {
         )
     }
 
-    // 종일 토글 한 개. 켜져 있으면 dateRow의 시각 부분이 숨겨진다.
-    private var allDayToggle: some View {
-        Toggle("종일", isOn: $isAllDay)
+    // 종일 토글 — labeledRow의 라벨이 "종일"을 담당하므로 Toggle 자체 라벨은 숨긴다.
+    private var allDayToggleControl: some View {
+        Toggle("", isOn: $isAllDay)
             .toggleStyle(.switch)
             .controlSize(.small)
+            .labelsHidden()
+            // Toggle은 가로폭을 다 채우려고 하므로 좌측 정렬 위해 Spacer로 밀어둠.
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // 시작/종료 줄 공용 — 라벨 + 날짜 picker (+ 시각 picker, 시간지정일 때만).
-    // 디자인 §3.3에는 "라벨 없이"라고 적혀 있지만 DatePicker는 placeholder 개념이 없어 시작/종료 구분이 필요.
-    // 짧은 인라인 라벨로 최소한의 신호만 준다.
-    private func dateRow(label: String, date: Binding<Date>) -> some View {
-        HStack(spacing: 10) {
-            Text(label)
-                .font(.system(size: 13))
-                .foregroundStyle(theme.fg.opacity(0.75))
-                .frame(width: 36, alignment: .leading)
-
-            DatePicker("", selection: date, displayedComponents: .date)
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .environment(\.locale, Locale(identifier: "ko_KR"))
-
+    // 시작/종료 행의 컨트롤 영역 — 날짜 필드 + (시간지정인 경우) 시각 필드.
+    // 종일이면 시각 필드 숨김. labeledRow가 "시작"/"종료" 라벨을 담당.
+    private func dateAndTimeControls(date: Binding<Date>) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            dateField(date: date, isTime: false)
             if !isAllDay {
-                DatePicker("", selection: date, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-                    .environment(\.locale, Locale(identifier: "ko_KR"))
+                dateField(date: date, isTime: true)
             }
-
             Spacer(minLength: 0)
         }
     }
+
+    // 한 필드 — 날짜 또는 시각. TextField + SwiftUI Stepper를 직접 조립해 내부 padding을 자유롭게 제어.
+    // macOS DatePicker(.stepperField)는 시스템 렌더링이 텍스트를 보더에 붙여 답답해 보여서 분해 구현.
+    // TextField(value:format:)는 키보드 입력 + 포맷 검증 자동, Stepper는 마우스 클릭 증감 담당.
+    @ViewBuilder
+    private func dateField(date: Binding<Date>, isTime: Bool) -> some View {
+        HStack(spacing: 0) {
+            TextField(
+                "",
+                value: date,
+                format: isTime ? Self.timeFormat : Self.dateFormat
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            // 내부 텍스트 padding — 기본 .stepperField 대비 좌우 10pt, 위아래 6pt 확보.
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            Stepper("", onIncrement: {
+                stepDate(date, by: 1, isTime: isTime)
+            }, onDecrement: {
+                stepDate(date, by: -1, isTime: isTime)
+            })
+            .labelsHidden()
+            // .small로 ▲▼ 버튼을 한 단계 작게 — 디폴트(.regular)보다 텍스트 행 높이와 더 잘 맞음.
+            .controlSize(.small)
+            .padding(.trailing, 4)
+        }
+        .background(theme.bg)
+        .overlay(
+            RoundedRectangle(cornerRadius: 5).stroke(theme.line, lineWidth: 1)
+        )
+        // 콘텐츠 폭에 맞게 — Spacer가 잡아당기지 않도록.
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    // Stepper 한 클릭당 증감량 — 시각은 15분, 일자는 1일.
+    private func stepDate(_ date: Binding<Date>, by sign: Int, isTime: Bool) {
+        let cal = Calendar.current
+        let unit: Calendar.Component = isTime ? .minute : .day
+        let amount = isTime ? sign * 15 : sign
+        if let new = cal.date(byAdding: unit, value: amount, to: date.wrappedValue) {
+            date.wrappedValue = new
+        }
+    }
+
+    // 포맷 — Date.FormatStyle preset 사용. ko_KR 로케일이라 "2026. 5. 4." / "오전 9:00" 형태로 렌더링됨.
+    // static으로 한 번만 만들어 매 렌더 시 재생성을 피한다.
+    private static let dateFormat = Date.FormatStyle(date: .numeric, locale: Locale(identifier: "ko_KR"))
+    private static let timeFormat = Date.FormatStyle(time: .shortened, locale: Locale(identifier: "ko_KR"))
 
     // 메모 영역 — 처음엔 "메모 추가" 버튼, 클릭하면 TextEditor로 교체(§3.3.6).
     @ViewBuilder
@@ -249,8 +307,11 @@ struct EventEditor: View {
                     Text("메모 (옵션)")
                         .font(.system(size: 13))
                         .foregroundStyle(theme.muted)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 16)
+                        // CategoryEditor와 동일 — TextEditor 텍스트 시작 위치에 맞춤:
+                        // 가로 = 외곽 padding 8 + NSTextView lineFragmentPadding ≈ 5 = 13
+                        // 세로 = 외곽 padding 8 + textContainer top inset ≈ 0 = 8
+                        .padding(.leading, 13)
+                        .padding(.top, 8)
                         .allowsHitTesting(false)
                 }
             }
@@ -277,21 +338,26 @@ struct EventEditor: View {
 
     // 버튼 줄 — 우측 정렬 [취소][저장]. 편집 모드에선 좌측 하단에 [삭제]도(§5.2).
     // 단축키: Esc=취소, Enter=저장. §3.5의 Cmd+Enter는 v1엔 미지원(Enter만으로 충분).
+    // controlSize(.large) + 위쪽 spacing으로 폼과 시각적으로 분리하고 버튼 자체도 더 넓게.
     private var buttonRow: some View {
-        HStack {
+        HStack(spacing: 10) {
             // 편집 모드 전용 destructive 좌측 정렬 — macOS HIG 패턴.
             if editing != nil {
                 Button("삭제", role: .destructive) {
                     showingDeleteAlert = true
                 }
+                .controlSize(.large)
             }
             Spacer()
             Button("취소") { dismiss() }
                 .keyboardShortcut(.cancelAction)
+                .controlSize(.large)
             Button("저장") { save() }
                 .keyboardShortcut(.defaultAction)
+                .controlSize(.large)
                 .disabled(!isValid)
         }
+        .padding(.top, 6)
     }
 
     // 저장 가능 여부.
