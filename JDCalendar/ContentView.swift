@@ -17,12 +17,13 @@ struct ContentView: View {
     // month는 0~11 (1월=0, 12월=11) 형태로 저장. 표시할 때만 +1 한다.
     @State private var month: Int
 
-    // §5.1 — 한 번에 한 이벤트만 선택. CalendarGrid → DayCell → EventChip으로 binding을 흘려보낸다.
-    @State private var selectedEventId: UUID? = nil
-
-    // §5.4 — Delete 키로 삭제 시 띄울 확인 alert의 대상.
-    // chip 자체의 우클릭 삭제는 chip 안에서 처리하지만, 글로벌 키 핸들러(Delete)는 여기서.
-    @State private var pendingDeleteEvent: Event? = nil
+    // 셀이 클릭되었을 때 화면 위에 띄우는 modal overlay 상태.
+    // nil이면 overlay가 떠 있지 않음. dim 배경 + DayEventsPopover 카드.
+    @State private var pickedDay: PickedDay? = nil
+    // + 버튼이 트리거하는 새 이벤트 시트의 대상 날짜. .sheet(item:)을 위해 wrapper.
+    @State private var newEventDate: PickedDate? = nil
+    // 행 클릭이 트리거하는 편집 시트의 대상 이벤트.
+    @State private var editingEvent: Event? = nil
 
     // §6.2 — 가로 스와이프로 월 이동을 처리하는 NSEvent monitor.
     @StateObject private var swipeMonitor = MonthSwipeMonitor()
@@ -38,6 +39,19 @@ struct ContentView: View {
         case forward, backward
     }
 
+    // modal overlay에 띄울 날짜 + 그 날의 이벤트 묶음. id를 통해 등장/소멸 transition 트리거.
+    struct PickedDay: Identifiable {
+        let id = UUID()
+        let date: Date
+        let events: [Event]
+    }
+
+    // sheet(item:)을 위한 단순 wrapper — Date 자체는 Identifiable이 아니므로.
+    struct PickedDate: Identifiable {
+        let id = UUID()
+        let date: Date
+    }
+
     // init: 앱이 시작되면 무조건 "오늘이 속한 달"로 초기화한다.
     // CLAUDE.md의 v1 규칙: cursor persistence 없음 — 항상 오늘 달로 연다.
     init() {
@@ -50,34 +64,64 @@ struct ContentView: View {
     }
 
     var body: some View {
-        // 새로운 레이아웃(슬라이스 2) — 위에서 아래로:
-        //   1) 상단 띠: 사이드바 토글 버튼(좌상단 고정)
-        //   2) 본체: 좌(사이드바, 펼침일 때) | 우(달력 헤더+요일행+그리드)
-        VStack(spacing: 0) {
-            topStrip
-            mainSplit
+        // ZStack — 아래 layer는 기존 캘린더 화면, 위 layer는 셀 클릭 시 뜨는 dim + 카드 overlay.
+        ZStack {
+            // 새로운 레이아웃(슬라이스 2) — 위에서 아래로:
+            //   1) 상단 띠: 사이드바 토글 버튼(좌상단 고정)
+            //   2) 본체: 좌(사이드바, 펼침일 때) | 우(달력 헤더+요일행+그리드)
+            VStack(spacing: 0) {
+                topStrip
+                mainSplit
+            }
+
+            // 셀 클릭 modal overlay — 화면 전체 dim + 가운데 카드.
+            if let pick = pickedDay {
+                // dim 배경 — 캘린더 위에 검정 오버레이로 카드를 도드라지게. 외부 클릭으로 닫힘.
+                Color.black.opacity(0.38)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { pickedDay = nil }
+                    .transition(.opacity)
+
+                // 헤더(양력+음력+ 버튼) + 카드(이벤트 리스트) — 화면 가운데에 floating.
+                DayEventsPopover(
+                    date: pick.date,
+                    events: pick.events,
+                    onAddNew: {
+                        // overlay를 먼저 닫고 짧은 지연 후 sheet — 같은 tick에 겹치면 sheet가
+                        // 안 뜨는 macOS 사례 회피.
+                        let d = pick.date
+                        pickedDay = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            newEventDate = PickedDate(date: d)
+                        }
+                    },
+                    onEdit: { ev in
+                        pickedDay = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            editingEvent = ev
+                        }
+                    }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
         }
+        // overlay 등장/소멸 애니메이션. pickedDay?.id로 같은 셀을 다시 클릭해도 트랜지션 발화.
+        .animation(.easeInOut(duration: 0.16), value: pickedDay?.id)
         // 부모(창)가 주는 공간을 끝까지 다 차지하도록 펼친다.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg)
         .foregroundStyle(theme.fg)
         // 타이틀바를 숨겼으므로 콘텐츠가 창 가장자리(safe area)를 무시하고 끝까지 그려지게 한다.
         .ignoresSafeArea()
-        // §5.1 글로벌 background tap — 셀/chip/버튼 등 자식이 잡지 않은 빈 영역 클릭 시 선택 해제.
-        // DayCell 안에 single tap을 두면 .onTapGesture(count:2)와 충돌해 250ms 지연이 발생하므로
-        // 모든 single-click 응답성을 위해 outer 한 군데에서만 처리한다.
-        //
-        // .background로 깔아야 하는 이유: 외곽 VStack에 직접 .onTapGesture를 걸면
-        // 자식 Button(.buttonStyle(.plain))과 제스처 중재가 충돌해 macOS에서 클릭이 묻히는
-        // 사례가 있음(특히 사이드바 토글). background 레이어는 자식 hit 영역에 가려지고
-        // 빈 영역에서만 발화하므로 Button과 경쟁하지 않는다.
-        .background(
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedEventId = nil
-                }
-        )
+        // 새 이벤트 시트 — overlay의 + 버튼이 트리거.
+        .sheet(item: $newEventDate) { wrap in
+            EventEditor(initialDate: wrap.date)
+        }
+        // 편집 시트 — overlay의 행 클릭이 트리거.
+        .sheet(item: $editingEvent) { ev in
+            EventEditor(editing: ev, initialDate: ev.startAt)
+        }
         // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 + 팔레트 마이그레이션 + 공휴일 동기화.
         // 순서가 중요: seed 가 먼저여야 첫 실행 시 "기본" 사용자 카테고리가 만들어진다.
         // (공휴일 sync 가 먼저 돌면 "공휴일" 카테고리만 존재해서 seed 가 no-op 으로 끝난다.)
@@ -108,69 +152,6 @@ struct ContentView: View {
                     in: modelContext
                 )
             }
-        }
-        // 글로벌 키 핸들러 — Esc(선택 해제), Delete/Backspace(선택된 이벤트 삭제 요청).
-        // .background에 hidden 버튼 + .keyboardShortcut으로 등록하는 SwiftUI macOS 관용 패턴.
-        // sheet/alert가 떠 있을 때는 그쪽 키 핸들러가 우선이라 모달 동작과 충돌하지 않는다.
-        .background {
-            keyboardHandlers
-        }
-        // §5.4 — Delete 키로 삭제 요청 시 뜨는 확인 다이얼로그. chip 자체 우클릭 삭제는 chip 안에서 별도로 처리.
-        .alert(
-            pendingDeleteEvent.map { "\"\($0.title)\"을 삭제할까요?" } ?? "",
-            isPresented: Binding(
-                get: { pendingDeleteEvent != nil },
-                set: { if !$0 { pendingDeleteEvent = nil } }
-            ),
-            presenting: pendingDeleteEvent
-        ) { ev in
-            Button("취소", role: .cancel) { }
-                .keyboardShortcut(.defaultAction)
-            Button("삭제", role: .destructive) {
-                modelContext.delete(ev)
-                try? modelContext.save()
-                selectedEventId = nil
-            }
-        }
-    }
-
-    // 글로벌 키 핸들러 모음 — invisible 버튼들을 zero size로 깔아 단축키만 받는다.
-    private var keyboardHandlers: some View {
-        ZStack {
-            Button {
-                selectedEventId = nil
-            } label: { EmptyView() }
-                .keyboardShortcut(.escape, modifiers: [])
-                .opacity(0)
-                .frame(width: 0, height: 0)
-
-            // KeyEquivalent.delete = macOS의 Backspace. forward delete(fn+Backspace)도 같이 등록.
-            Button {
-                requestDeleteSelected()
-            } label: { EmptyView() }
-                .keyboardShortcut(.delete, modifiers: [])
-                .opacity(0)
-                .frame(width: 0, height: 0)
-
-            Button {
-                requestDeleteSelected()
-            } label: { EmptyView() }
-                .keyboardShortcut(.deleteForward, modifiers: [])
-                .opacity(0)
-                .frame(width: 0, height: 0)
-        }
-    }
-
-    // 선택된 이벤트가 있으면 modelContext에서 fetch해서 alert 대상으로 세팅.
-    // 시스템 관리 카테고리(공휴일 등)의 이벤트는 키보드 Delete로도 삭제할 수 없도록 여기서 차단.
-    // chip/막대 자체에서 컨텍스트 메뉴는 이미 숨겨졌지만, 단일 클릭으로 선택은 허용되므로
-    // 글로벌 단축키 진입점에서 한 번 더 막아야 한다.
-    private func requestDeleteSelected() {
-        guard let id = selectedEventId else { return }
-        let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == id })
-        if let ev = try? modelContext.fetch(descriptor).first {
-            guard !ev.category.isSystemManaged else { return }
-            pendingDeleteEvent = ev
         }
     }
 
@@ -212,7 +193,9 @@ struct ContentView: View {
                 // 월이 바뀔 때 좌/우 슬라이드 + 페이드 transition.
                 // .id()로 (year, month) 조합마다 별도 view identity → SwiftUI가 transition 발화.
                 // 잘림 방지로 .clipped() — 이전 달 grid가 트랙 바깥으로 밀려나가는 동안 가려짐.
-                CalendarGrid(year: year, month: month, selectedEventId: $selectedEventId)
+                CalendarGrid(year: year, month: month, onPickDay: { date, events in
+                    pickedDay = PickedDay(date: date, events: events)
+                })
                     .id("\(year)-\(month)")
                     .transition(calendarTransition)
             }

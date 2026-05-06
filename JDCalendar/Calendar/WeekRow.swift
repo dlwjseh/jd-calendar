@@ -12,10 +12,11 @@ struct WeekRow: View {
     let today: Date
     let isLastRow: Bool
     let perDayEvents: [Date: [Event]]            // 단일일 이벤트 (날짜 키)
-    let perDayAllEvents: [Date: [Event]]         // §5.6 popover용 — 단일일 + 멀티데이 모두 (정렬 완료)
+    let perDayAllEvents: [Date: [Event]]         // 셀 클릭 popover용 — 단일일 + 멀티데이 모두 (정렬 완료)
     let weekSegments: [MultiDaySegment]          // 이 주의 멀티데이 segment들 (이미 트랙 할당됨)
     let cellTrackCounts: [Int]                   // 7개 — 각 셀이 차지하는 멀티데이 트랙 수
-    @Binding var selectedEventId: UUID?
+    // 셀 클릭 콜백 — DayCell에서 받아 그대로 부모(CalendarGrid)로 전달.
+    let onPickDay: (Date, [Event]) -> Void
 
     // 멀티데이 막대 한 줄(트랙)의 시각 높이. EventChip의 종일 박스와 동일.
     private static let trackHeight: CGFloat = 16
@@ -43,7 +44,7 @@ struct WeekRow: View {
                     events: perDayEvents[dayKey] ?? [],
                     allEvents: perDayAllEvents[dayKey] ?? [],
                     multiDayTrackCount: cellTrackCounts[col],
-                    selectedEventId: $selectedEventId
+                    onPickDay: onPickDay
                 )
             }
         }
@@ -55,7 +56,7 @@ struct WeekRow: View {
                 let cellWidth = geo.size.width / 7
                 ForEach(weekSegments) { seg in
                     let segCells = CGFloat(seg.endCol - seg.startCol + 1)
-                    MultiDayBar(segment: seg, selectedEventId: $selectedEventId)
+                    MultiDayBar(segment: seg)
                         // 양 끝에 셀 padding 만큼 들여 — 단일일 chip과 같은 좌우 여백.
                         .frame(
                             width: cellWidth * segCells - 2 * Self.cellHorizontalPadding,

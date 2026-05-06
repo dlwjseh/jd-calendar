@@ -6,8 +6,8 @@ import SwiftData
 struct CalendarGrid: View {
     let year: Int
     let month: Int
-    // §5.1 — 한 번에 한 이벤트만 선택. ContentView에서 끌어내려 모든 셀에 같은 binding 전달.
-    @Binding var selectedEventId: UUID?
+    // 셀 클릭 콜백 — 모달 overlay는 ContentView 레벨에서 그리므로 그쪽으로 전달.
+    let onPickDay: (Date, [Event]) -> Void
 
     // 모든 이벤트를 한 번에 fetch — v1엔 데이터가 적으니 충분하다.
     // 데이터가 늘어나면 (year, month) 범위 predicate로 좁히는 최적화로 대체한다.
@@ -24,7 +24,7 @@ struct CalendarGrid: View {
         // §4.4 카테고리 필터를 한 번만 — 단일일/멀티데이가 같이 사용한다.
         let visibleEvents = events.filter { $0.category.isVisible }
         let perDay = singleDayEventsByDay(visibleEvents)
-        // §5.6 popover용 — 그 날에 걸치는 모든 이벤트(단일일 + 멀티데이).
+        // 셀 클릭 popover용 — 그 날에 걸치는 모든 이벤트(단일일 + 멀티데이).
         let perDayAll = allEventsByDay(visibleEvents)
         let allSegments = MultiDayLayout.buildSegments(events: visibleEvents, cells: cells)
         let trackCounts = MultiDayLayout.cellTrackCounts(segments: allSegments, weekCount: weekCount)
@@ -45,7 +45,7 @@ struct CalendarGrid: View {
                     perDayAllEvents: perDayAll,
                     weekSegments: weekSegs,
                     cellTrackCounts: weekTracks,
-                    selectedEventId: $selectedEventId
+                    onPickDay: onPickDay
                 )
             }
         }
@@ -80,8 +80,8 @@ struct CalendarGrid: View {
         return lhs.createdAt < rhs.createdAt
     }
 
-    // §5.6 popover용 — 그 날(date 키)에 걸치는 모든 이벤트(단일일 + 멀티데이) 묶어 반환.
-    // 정렬은 §4.5 트랙 우선순위: 멀티데이 → 단일일 종일 → 단일일 시간지정 → createdAt 타이.
+    // 셀 클릭 popover용 — 그 날(date 키)에 걸치는 모든 이벤트(단일일 + 멀티데이) 묶어 반환.
+    // 정렬: 멀티데이 → 단일일 종일 → 단일일 시간지정 → createdAt 타이.
     // 멀티데이는 걸치는 모든 날짜에 똑같이 등록된다 — 같은 이벤트가 여러 키에 들어감.
     private func allEventsByDay(_ visibleEvents: [Event]) -> [Date: [Event]] {
         var dict: [Date: [Event]] = [:]
@@ -105,7 +105,7 @@ struct CalendarGrid: View {
         return dict
     }
 
-    // §4.5 — popover 내 이벤트 정렬: 멀티데이 → 단일일 종일 → 단일일 시간지정 → createdAt 타이.
+    // popover 내 이벤트 정렬: 멀티데이 → 단일일 종일 → 단일일 시간지정 → createdAt 타이.
     private func popoverOrdering(_ lhs: Event, _ rhs: Event) -> Bool {
         let lhsMulti = MultiDayLayout.isMultiDay(lhs)
         let rhsMulti = MultiDayLayout.isMultiDay(rhs)

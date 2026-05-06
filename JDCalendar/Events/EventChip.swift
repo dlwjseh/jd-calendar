@@ -8,19 +8,10 @@ import AppKit
 // 종일: 카테고리 색으로 채운 가로 박스 + 흰색 또는 검정 자동 텍스트.
 // 시간지정: 좌측 얇은 색 바 + "HH:mm 제목" 한 줄(텍스트 색은 페이지 기본).
 //
-// §5.1 인터랙션:
-// - 단일 클릭 → 선택 상태(외곽 링)
-// - 더블 클릭 → 편집 시트
-// - 우클릭 → 컨텍스트 메뉴(편집/삭제)
-// 선택 상태는 부모(ContentView)의 selectedEventId binding으로 끌어올림 — 한 번에 한 항목만(§5.1).
+// 인터랙션: v2 재정립 중 — 표시 + 드래그 + 호버만 남김.
+// 잠긴 이벤트(공휴일 등)는 드래그도 막는다.
 struct EventChip: View {
     let event: Event
-    @Binding var selectedEventId: UUID?
-
-    @Environment(\.modelContext) private var modelContext
-
-    @State private var showingEditor = false
-    @State private var showingDeleteAlert = false
 
     private let theme = CalendarTheme.light
 
@@ -31,85 +22,38 @@ struct EventChip: View {
         return f
     }()
 
-    private var isSelected: Bool { selectedEventId == event.id }
-    // 시스템 관리 카테고리(공휴일 등)의 이벤트는 잠금 — 편집/삭제/드래그 모두 차단.
-    // 카테고리 자체와 마찬가지로 사용자가 손댈 수 있는 건 카테고리 보이기/숨기기뿐.
+    // 시스템 관리 카테고리(공휴일 등)의 이벤트는 잠금 — 드래그 차단.
     private var isLocked: Bool { event.category.isSystemManaged }
 
     var body: some View {
         if isLocked {
-            // 공휴일 등 잠긴 이벤트 — 단일 클릭 선택만 허용. 더블탭(편집), 드래그,
-            // 컨텍스트 메뉴, 시트, 삭제 alert 모두 등록하지 않는다.
+            // 잠긴 이벤트 — 드래그 없이 표시 + 호버만.
             chipShape
                 .contentShape(Rectangle())
                 .onHover { hovering in
                     if hovering { NSCursor.arrow.push() } else { NSCursor.pop() }
                 }
-                .onTapGesture(count: 1) {
-                    selectedEventId = event.id
-                }
         } else {
-            // 사용자 이벤트 — 기존 인터랙션 그대로.
+            // 사용자 이벤트 — 드래그 + 호버.
             chipShape
                 .contentShape(Rectangle())
-                // §6.1 — 드래그로 날짜 이동. payload는 event.id 문자열, drop 처리는 DayCell이.
-                // SwiftUI 기본 drag preview(반투명 snapshot)를 그대로 사용.
+                // 드래그로 날짜 이동. payload는 event.id 문자열, drop 처리는 DayCell이.
                 .draggable(event.id.uuidString)
                 // chip 위 hover 시 마우스 커서를 기본 화살표로 고정 — Text view 기본 i-beam이나
                 // .draggable의 시스템 hand 커서로 바뀌지 않도록(사용자 요청).
                 .onHover { hovering in
                     if hovering { NSCursor.arrow.push() } else { NSCursor.pop() }
                 }
-                // 더블 클릭 = 편집 시트(§5.1). count: 2를 먼저 등록해야 single과 충돌 시 우선.
-                .onTapGesture(count: 2) {
-                    selectedEventId = event.id
-                    showingEditor = true
-                }
-                // 단일 클릭 = 선택. SwiftUI는 single/double 둘 다 등록 시 약 200ms delay 후 single 발화.
-                .onTapGesture(count: 1) {
-                    selectedEventId = event.id
-                }
-                // §5.5 우클릭 컨텍스트 메뉴 — 편집 / 삭제.
-                .contextMenu {
-                    Button("편집") {
-                        selectedEventId = event.id
-                        showingEditor = true
-                    }
-                    Button("삭제", role: .destructive) {
-                        selectedEventId = event.id
-                        showingDeleteAlert = true
-                    }
-                }
-                // §5.2 편집 시트 — 같은 EventEditor를 editing 인자에 자기 이벤트 넣어 재사용.
-                .sheet(isPresented: $showingEditor) {
-                    EventEditor(editing: event, initialDate: event.startAt)
-                }
-                // §5.4 삭제 확인 다이얼로그 — 본문 없음, 기본 버튼은 취소.
-                .alert(deleteTitle, isPresented: $showingDeleteAlert) {
-                    Button("취소", role: .cancel) { }
-                        .keyboardShortcut(.defaultAction)
-                    Button("삭제", role: .destructive) {
-                        delete()
-                    }
-                }
         }
     }
 
-    // 종일/시간지정 두 모양과 선택 강조 외곽 링까지 합친 공통 시각 부분.
-    // 잠금 분기와 무관하게 공유되므로 별도 프로퍼티로 추출.
+    // 종일/시간지정 두 모양을 묶은 공통 시각 부분.
     private var chipShape: some View {
         Group {
             if event.isAllDay {
                 allDayBox
             } else {
                 timedRow
-            }
-        }
-        // §5.1 선택 강조 — 두 모드 공통으로 외곽 링.
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(theme.fg, lineWidth: 1.5)
             }
         }
     }
@@ -148,19 +92,7 @@ struct EventChip: View {
 
             Spacer(minLength: 0)
         }
-        // 16pt 정도 — 종일 박스와 비슷한 행 높이. fixedSize로 vertical만 콘텐츠에 맞춤.
+        // 16pt 정도 — 종일 박스와 비슷한 행 높이.
         .frame(height: 16)
-    }
-
-    // §5.4 — 제목은 항상 "<제목>"을 삭제할까요?
-    private var deleteTitle: String {
-        "\"\(event.title)\"을 삭제할까요?"
-    }
-
-    // 삭제 — 선택 해제하고 modelContext에서 제거.
-    private func delete() {
-        if selectedEventId == event.id { selectedEventId = nil }
-        modelContext.delete(event)
-        try? modelContext.save()
     }
 }

@@ -19,22 +19,18 @@ struct DayCell: View {
     let isLastCol: Bool
     // 이 셀 날짜에 표시할 단일일 이벤트들 — 부모(WeekRow)에서 §4.4 필터/§4.5 정렬을 거쳐 넘겨준다.
     let events: [Event]
-    // §5.6 popover용 — 그 날에 걸치는 모든 이벤트(단일일 + 멀티데이), §4.5 정렬 완료.
+    // popover용 — 그 날에 걸치는 모든 이벤트(단일일 + 멀티데이), 정렬 완료.
     let allEvents: [Event]
     // 이 셀 위로 지나가는 멀티데이 막대의 트랙 수(§4.3) — 그만큼 셀 안에 invisible spacer를 둬서
     // 단일일 chip이 막대 아래에 깔끔히 정렬되도록 한다. 실제 막대는 WeekRow의 overlay가 그린다.
     let multiDayTrackCount: Int
-    // §5.1 — 한 번에 한 이벤트만 선택. 자식 EventChip에 그대로 binding으로 내려준다.
-    @Binding var selectedEventId: UUID?
+    // 셀 클릭 시 부모(ContentView)에게 알리는 콜백 — modal overlay는 ContentView 레벨에서 그린다.
+    // (date, 그 날의 모든 이벤트) 를 넘긴다.
+    let onPickDay: (Date, [Event]) -> Void
 
-    // EVENT_FEATURE.md §3.1 — 셀 더블클릭 시 새 이벤트 시트.
-    // 셀마다 자체 sheet 상태를 들고 있지만 SwiftUI 모달은 한 번에 하나만 뜨므로 충돌 없음.
-    @State private var showingEditor = false
-    // §5.6 — +M more 클릭 시 그 날의 모든 이벤트 popover.
-    @State private var showingDayPopover = false
     // §6.1 — 드래그된 이벤트가 이 셀 위에 있을 때 외곽 강조용 플래그.
     @State private var isDropTarget = false
-    // 마우스가 이 셀 위에 올라와 있는지 — 옅은 배경 틴트로 어떤 셀이 클릭 대상인지 알려준다.
+    // 마우스가 이 셀 위에 올라와 있는지 — 옅은 배경 틴트로 어떤 셀이 호버 대상인지 알려준다.
     @State private var isHovered = false
 
     // §6.1 — 드롭된 이벤트를 fetch / 저장하기 위한 컨텍스트.
@@ -88,17 +84,12 @@ struct DayCell: View {
         .padding(.bottom, 4)
         // 이번 달이 아닌 셀은 전체적으로 살짝 투명하게 — 흐리게 표시 효과.
         .opacity(cell.inMonth ? 1 : 0.55)
-        // 빈 영역까지 더블클릭 대상이 되도록 셀 전체에 히트 영역.
+        // 호버/드롭/탭 영역으로 셀 전체를 잡아준다.
         .contentShape(Rectangle())
-        // §3.1 — 셀 더블클릭으로 새 이벤트 시트 열기.
-        .onTapGesture(count: 2) {
-            showingEditor = true
-        }
-        // §5.1 — 셀 빈 영역 single-click은 "consume만" — ContentView outer로 bubble되지 않아
-        // 선택이 해제되지 않게. count: 2와 같이 두기 때문에 셀 빈 영역 자체는 약 250ms double-click
-        // 대기가 있지만 액션이 빈 핸들러라 사용자가 인지할 일 없음. +M more / chip은 자체 핸들러로 처리.
-        .onTapGesture(count: 1) {
-            // intentionally empty — consume only.
+        // 셀 클릭 → 부모에게 알림. chip/막대 등 자식이 자체 onTapGesture를 등록하지 않으므로
+        // 그 위 클릭도 여기로 propagate.
+        .onTapGesture {
+            onPickDay(cell.date, allEvents)
         }
         // §6.1 — 다른 chip/막대를 끌어와 이 셀에 드롭하면 그 이벤트의 날짜를 평행 이동.
         // payload는 event.id 문자열.
@@ -109,10 +100,6 @@ struct DayCell: View {
             return true
         } isTargeted: { hovering in
             isDropTarget = hovering
-        }
-        // 시트는 셀 단위 — initialDate로 셀 날짜를 넘긴다.
-        .sheet(isPresented: $showingEditor) {
-            EventEditor(initialDate: cell.date)
         }
         // 마우스 호버 감지 — 들어왔다/나갔다 boolean만 토글. 진입/이탈 즉시 반응(애니메이션 없음).
         .onHover { hovering in
@@ -181,8 +168,8 @@ struct DayCell: View {
     }
 
     // 셀 안 단일일 이벤트 목록 — §4.2 트랙 합계 max 3 기준으로 표시 가능 슬롯 계산.
-    // 멀티데이 트랙이 3개 이상이면 단일일 chip은 한 개도 못 들어가고, 모자란 만큼 +M more에 합산.
-    // +M more 클릭 → §5.6 popover로 그 날의 모든 이벤트 표시.
+    // 멀티데이 트랙이 3개 이상이면 단일일 chip은 한 개도 못 들어가고, 모자란 만큼 +M more 라벨로 표기.
+    // (v2 재정립 중 — +M more 클릭/popover 인터랙션은 이벤트 관리 재설계와 함께 다시 붙일 예정.)
     @ViewBuilder
     private var eventsList: some View {
         let availableSlots = max(0, Self.maxTracks - multiDayTrackCount)
@@ -193,28 +180,14 @@ struct DayCell: View {
 
         VStack(alignment: .leading, spacing: 1) {
             ForEach(Array(visibleSingles), id: \.id) { ev in
-                EventChip(event: ev, selectedEventId: $selectedEventId)
+                EventChip(event: ev)
             }
             if overflow > 0 {
-                // Button 대신 Text + .onTapGesture — Button의 macOS press feedback latency를 피해
-                // popover가 더 즉각적으로 뜬다. Text 자체에 count:1만 있으므로 double-click 대기도 없음.
+                // 표시만 — 클릭 인터랙션은 v2에서 다시 붙임.
                 Text("+\(overflow) more")
                     .font(.system(size: 10))
                     .foregroundStyle(theme.muted)
                     .padding(.leading, 4)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        showingDayPopover = true
-                    }
-                    // §5.6 — popover로 그 날의 모든 이벤트(단일일 + 멀티데이) 표시.
-                    // 외부 클릭/Esc로 자동 닫힘은 .popover의 native 동작.
-                    .popover(isPresented: $showingDayPopover, arrowEdge: .top) {
-                        DayEventsPopover(
-                            date: cell.date,
-                            events: allEvents,
-                            selectedEventId: $selectedEventId
-                        )
-                    }
             }
         }
         // 멀티데이 트랙이 없는 셀은 라벨 직후 작은 padding으로 시작.
