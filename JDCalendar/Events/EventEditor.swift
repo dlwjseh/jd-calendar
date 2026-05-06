@@ -9,8 +9,10 @@ import SwiftData
 struct EventEditor: View {
     let editing: Event?
     let initialDate: Date
+    // 부모(ContentView)가 overlay 슬롯을 nil 로 비우는 콜백. 시트가 아닌 inline 카드로 띄우므로
+    // SwiftUI 의 \.dismiss 는 동작하지 않는다 — 닫기는 항상 이 콜백으로 일원화.
+    let onClose: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
     // 카테고리 드롭다운 후보. 사이드바와 같은 정렬(생성 순) 사용.
@@ -42,9 +44,10 @@ struct EventEditor: View {
 
     // 신규/편집 공용 init. 편집이면 기존 이벤트 값을 @State 초기값으로 채운다.
     // 종일 이벤트의 endAt은 모델에선 배타적(다음날 00:00)이지만 폼에선 "끝나는 날 포함"으로 보여줘야 하므로 -1일 보정.
-    init(editing: Event? = nil, initialDate: Date) {
+    init(editing: Event? = nil, initialDate: Date, onClose: @escaping () -> Void) {
         self.editing = editing
         self.initialDate = initialDate
+        self.onClose = onClose
 
         if let ev = editing {
             _title = State(initialValue: ev.title)
@@ -97,7 +100,13 @@ struct EventEditor: View {
         }
         .padding(20)
         .frame(width: 400)
-        .background(theme.bg)
+        // 일 popover 카드와 같은 시각 통일 — 둥근 흰 사각형 + 부드러운 그림자.
+        // 시트가 아닌 inline overlay 로 떠 있으므로 카드 chrome 을 직접 그린다.
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(theme.bg)
+                .shadow(color: .black.opacity(0.15), radius: 14, x: 0, y: 4)
+        )
         // 신규 생성일 때만 카테고리 자동 선택 — 편집 모드는 init에서 이미 채움.
         .onAppear {
             if editing == nil && selectedCategory == nil {
@@ -349,7 +358,7 @@ struct EventEditor: View {
                 .controlSize(.large)
             }
             Spacer()
-            Button("취소") { dismiss() }
+            Button("취소") { onClose() }
                 .keyboardShortcut(.cancelAction)
                 .controlSize(.large)
             Button("저장") { save() }
@@ -408,13 +417,13 @@ struct EventEditor: View {
         }
     }
 
-    // 편집 모드 삭제 — 이벤트 제거 후 시트 닫기(§5.2).
+    // 편집 모드 삭제 — 이벤트 제거 후 overlay 닫기(§5.2).
     private func deleteEvent() {
         if let ev = editing {
             modelContext.delete(ev)
             try? modelContext.save()
         }
-        dismiss()
+        onClose()
     }
 
     // 저장 — 신규면 새 Event 삽입, 편집이면 기존 인스턴스 필드 갱신.
@@ -447,6 +456,6 @@ struct EventEditor: View {
         lastUsedCategoryId = cat.id.uuidString
 
         try? modelContext.save()
-        dismiss()
+        onClose()
     }
 }

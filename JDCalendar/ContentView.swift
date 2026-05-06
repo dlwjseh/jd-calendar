@@ -17,13 +17,13 @@ struct ContentView: View {
     // month는 0~11 (1월=0, 12월=11) 형태로 저장. 표시할 때만 +1 한다.
     @State private var month: Int
 
-    // 셀이 클릭되었을 때 화면 위에 띄우는 modal overlay 상태.
-    // nil이면 overlay가 떠 있지 않음. dim 배경 + DayEventsPopover 카드.
+    // 화면 위에 떠 있는 두 layer 상태:
+    //   1) pickedDay — 일 popover. 셀 클릭 시 set, 외부 클릭 또는 등록/편집 종료 시 nil.
+    //   2) editorMode — 등록/편집 카드. + 버튼/행 클릭 시 set, Save/Cancel/Delete 시 nil.
+    // 두 layer 를 분리한 이유: 등록 카드가 popover 위로 emerge 할 때 popover 는 그대로 mount 유지하여
+    // 자연스럽게 새 카드에 가려지게 하기 위함. 한 슬롯으로 묶으면 popover 도 같이 fade out 되어 어수선해진다.
     @State private var pickedDay: PickedDay? = nil
-    // + 버튼이 트리거하는 새 이벤트 시트의 대상 날짜. .sheet(item:)을 위해 wrapper.
-    @State private var newEventDate: PickedDate? = nil
-    // 행 클릭이 트리거하는 편집 시트의 대상 이벤트.
-    @State private var editingEvent: Event? = nil
+    @State private var editorMode: EditorMode? = nil
 
     // §6.2 — 가로 스와이프로 월 이동을 처리하는 NSEvent monitor.
     @StateObject private var swipeMonitor = MonthSwipeMonitor()
@@ -39,17 +39,24 @@ struct ContentView: View {
         case forward, backward
     }
 
-    // modal overlay에 띄울 날짜 + 그 날의 이벤트 묶음. id를 통해 등장/소멸 transition 트리거.
-    struct PickedDay: Identifiable {
-        let id = UUID()
+    // 일 popover 가 보여줄 데이터. 같은 셀을 다시 클릭하면 같은 date 로 다시 set 되어
+    // overlayKey 가 그대로라 SwiftUI 가 transition 을 재발화하지 않음.
+    struct PickedDay {
         let date: Date
         let events: [Event]
     }
 
-    // sheet(item:)을 위한 단순 wrapper — Date 자체는 Identifiable이 아니므로.
-    struct PickedDate: Identifiable {
-        let id = UUID()
-        let date: Date
+    // 등록/편집 카드의 모드.
+    enum EditorMode {
+        case new(Date)
+        case edit(Event)
+
+        var id: String {
+            switch self {
+            case .new(let d): return "new-\(d.timeIntervalSince1970)"
+            case .edit(let ev): return "edit-\(ev.id)"
+            }
+        }
     }
 
     // init: 앱이 시작되면 무조건 "오늘이 속한 달"로 초기화한다.
@@ -64,7 +71,8 @@ struct ContentView: View {
     }
 
     var body: some View {
-        // ZStack — 아래 layer는 기존 캘린더 화면, 위 layer는 셀 클릭 시 뜨는 dim + 카드 overlay.
+        // ZStack — 아래에서 위 순서: 캘린더 → dim → 일 popover → 등록/편집 카드.
+        // ZStack 자식 순서가 z-order 라서 등록 카드가 자연스럽게 popover 위에 layer 된다.
         ZStack {
             // 새로운 레이아웃(슬라이스 2) — 위에서 아래로:
             //   1) 상단 띠: 사이드바 토글 버튼(좌상단 고정)
@@ -74,54 +82,45 @@ struct ContentView: View {
                 mainSplit
             }
 
-            // 셀 클릭 modal overlay — 화면 전체 dim + 가운데 카드.
-            if let pick = pickedDay {
-                // dim 배경 — 캘린더 위에 검정 오버레이로 카드를 도드라지게. 외부 클릭으로 닫힘.
+            // dim — popover 또는 등록/편집 카드가 떠 있는 동안 계속 유지.
+            // 외부 클릭은 일 popover 만 떠 있을 때만 닫음(폼 입력 손실 방지).
+            if pickedDay != nil || editorMode != nil {
                 Color.black.opacity(0.38)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
-                    .onTapGesture { pickedDay = nil }
-                    .transition(.opacity)
-
-                // 헤더(양력+음력+ 버튼) + 카드(이벤트 리스트) — 화면 가운데에 floating.
-                DayEventsPopover(
-                    date: pick.date,
-                    events: pick.events,
-                    onAddNew: {
-                        // overlay를 먼저 닫고 짧은 지연 후 sheet — 같은 tick에 겹치면 sheet가
-                        // 안 뜨는 macOS 사례 회피.
-                        let d = pick.date
-                        pickedDay = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            newEventDate = PickedDate(date: d)
-                        }
-                    },
-                    onEdit: { ev in
-                        pickedDay = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            editingEvent = ev
-                        }
+                    .onTapGesture {
+                        if editorMode == nil { pickedDay = nil }
                     }
+                    .transition(.opacity)
+            }
+
+            // 일 popover — pickedDay 가 살아있는 동안 계속 mount.
+            // 등록/편집 카드가 위에서 emerge 하면 그 밑에 그대로 가려진다(transition 없이).
+            if let pd = pickedDay {
+                DayEventsPopover(
+                    date: pd.date,
+                    events: pd.events,
+                    onAddNew: { editorMode = .new(pd.date) },
+                    onEdit: { ev in editorMode = .edit(ev) }
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+            }
+
+            // 등록/편집 카드 — popover 위 layer. + 버튼/행 클릭 시 emerge.
+            if let em = editorMode {
+                editorView(for: em)
+                    .id(em.id)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
             }
         }
-        // overlay 등장/소멸 애니메이션. pickedDay?.id로 같은 셀을 다시 클릭해도 트랜지션 발화.
-        .animation(.easeInOut(duration: 0.16), value: pickedDay?.id)
+        // 두 상태 변화를 한 키로 묶어 트래킹. spring response 0.34 / damping 0.88 — bounce 없이 settle.
+        .animation(.spring(response: 0.34, dampingFraction: 0.88), value: overlayKey)
         // 부모(창)가 주는 공간을 끝까지 다 차지하도록 펼친다.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg)
         .foregroundStyle(theme.fg)
         // 타이틀바를 숨겼으므로 콘텐츠가 창 가장자리(safe area)를 무시하고 끝까지 그려지게 한다.
         .ignoresSafeArea()
-        // 새 이벤트 시트 — overlay의 + 버튼이 트리거.
-        .sheet(item: $newEventDate) { wrap in
-            EventEditor(initialDate: wrap.date)
-        }
-        // 편집 시트 — overlay의 행 클릭이 트리거.
-        .sheet(item: $editingEvent) { ev in
-            EventEditor(editing: ev, initialDate: ev.startAt)
-        }
         // 앱이 화면에 뜨자마자 1번만 실행되는 비동기 훅 — 카테고리 시드 + 팔레트 마이그레이션 + 공휴일 동기화.
         // 순서가 중요: seed 가 먼저여야 첫 실행 시 "기본" 사용자 카테고리가 만들어진다.
         // (공휴일 sync 가 먼저 돌면 "공휴일" 카테고리만 존재해서 seed 가 no-op 으로 끝난다.)
@@ -153,6 +152,32 @@ struct ContentView: View {
                 )
             }
         }
+    }
+
+    // 등록/편집 카드 분기 — switch 를 ZStack 안에 인라인하면 type-erasure 가 까다로우므로 별도 헬퍼.
+    @ViewBuilder
+    private func editorView(for mode: EditorMode) -> some View {
+        switch mode {
+        case .new(let date):
+            EventEditor(initialDate: date, onClose: closeAll)
+        case .edit(let ev):
+            EventEditor(editing: ev, initialDate: ev.startAt, onClose: closeAll)
+        }
+    }
+
+    // 등록/편집 폼 종료 — 카드와 popover 둘 다 정리.
+    // popover 도 같이 닫아야 사용자가 작업을 마치고 캘린더로 돌아온다는 흐름이 자연스럽다.
+    private func closeAll() {
+        editorMode = nil
+        pickedDay = nil
+    }
+
+    // 두 layer 상태(pickedDay, editorMode) 변화를 한 묶음으로 추적하는 합성 키.
+    // .animation(value:) 가 Equatable 한 단일 값을 요구하므로 String 으로 합쳐 넘긴다.
+    private var overlayKey: String {
+        let pd = pickedDay.map { "p-\($0.date.timeIntervalSince1970)" } ?? ""
+        let em = editorMode?.id ?? ""
+        return "\(pd)|\(em)"
     }
 
     // 상단 띠 — A2 안. 토글 버튼이 좌측에, 우측은 비워둠.
